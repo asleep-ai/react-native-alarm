@@ -1,5 +1,6 @@
 import ExpoModulesCore
 import WebKit
+// No UserNotifications in iOS 26+ only build
 
 // This view will be used as a native component. Make sure to inherit from `ExpoView`
 // to apply the proper styling (e.g. border radius and shadows).
@@ -36,3 +37,5 @@ class WebViewDelegate: NSObject, WKNavigationDelegate {
     }
   }
 }
+
+// Removed UserNotifications delegate.

@@ -20,6 +20,9 @@ Pod::Spec.new do |s|
 
   s.dependency 'ExpoModulesCore'
 
+  # Weak-link AlarmKit so builds succeed on older SDKs while enabling iOS 18+ features.
+  s.weak_frameworks = 'AlarmKit'
+
   # Swift/Objective-C compatibility
   s.pod_target_xcconfig = {
     'DEFINES_MODULE' => 'YES',
