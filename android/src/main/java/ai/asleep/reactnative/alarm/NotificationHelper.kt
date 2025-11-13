@@ -16,7 +16,8 @@ import java.text.DateFormat
 import java.util.Date
 
 internal object NotificationHelper {
-  const val CHANNEL_TIMERS = "react_native_alarm_timers"
+  const val CHANNEL_TIMERS = "react_native_alarm_timers" // legacy low-importance
+  const val CHANNEL_TIMERS_HIGH = "react_native_alarm_timers_high"
   const val CHANNEL_ALERTS = "react_native_alarm_alerts"
 
   fun ensureChannels(context: Context) {
@@ -31,6 +32,19 @@ internal object NotificationHelper {
         NotificationManager.IMPORTANCE_LOW
       )
       ch.description = "Ongoing countdown timers"
+      ch.lockscreenVisibility = Notification.VISIBILITY_PUBLIC
+      nm.createNotificationChannel(ch)
+    }
+
+    // Timers high-importance (for keyguard visibility)
+    if (nm.getNotificationChannel(CHANNEL_TIMERS_HIGH) == null) {
+      val ch = NotificationChannel(
+        CHANNEL_TIMERS_HIGH,
+        "Alarms & timers (keyguard visible)",
+        NotificationManager.IMPORTANCE_HIGH
+      )
+      ch.description = "Countdown timers visible on the lock screen"
+      ch.lockscreenVisibility = Notification.VISIBILITY_PUBLIC
       nm.createNotificationChannel(ch)
     }
 
@@ -49,6 +63,7 @@ internal object NotificationHelper {
         .build()
       ch.setSound(alarmUri, attrs)
       ch.enableVibration(true)
+      ch.lockscreenVisibility = Notification.VISIBILITY_PUBLIC
       nm.createNotificationChannel(ch)
     }
   }
@@ -98,13 +113,16 @@ internal object NotificationHelper {
       PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
     )
 
-    val builder = NotificationCompat.Builder(context, CHANNEL_TIMERS)
+    val builder = NotificationCompat.Builder(context, CHANNEL_TIMERS_HIGH)
       .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
       .setContentTitle(title)
       .setContentText(content)
       .setOngoing(true)
       .setOnlyAlertOnce(true)
       .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+      .setCategory(NotificationCompat.CATEGORY_ALARM)
+      .setPriority(NotificationCompat.PRIORITY_HIGH)
+      .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
       // Live countdown in the notification (system-updated chronometer)
       .setUsesChronometer(!isPaused)
       .setChronometerCountDown(true)
@@ -119,7 +137,7 @@ internal object NotificationHelper {
     return builder.build()
   }
 
-  fun showAlarmAlert(context: Context, id: String, label: String?) {
+  fun buildAlarmAlertNotification(context: Context, id: String, label: String?, fullScreen: Boolean): Notification {
     ensureChannels(context)
     val title = if (!label.isNullOrBlank()) label else "Alarm"
 
@@ -157,10 +175,18 @@ internal object NotificationHelper {
       .setAutoCancel(true)
       .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
       .setContentIntent(fsPi)
-      .setFullScreenIntent(fsPi, true)
       .addAction(0, "Dismiss", dismissPi)
 
-    NotificationManagerCompat.from(context).notify(id.hashCode(), builder.build())
+    if (fullScreen) {
+      builder.setFullScreenIntent(fsPi, true)
+    }
+
+    return builder.build()
+  }
+
+  fun showAlarmAlert(context: Context, id: String, label: String?) {
+    val notif = buildAlarmAlertNotification(context, id, label, true)
+    NotificationManagerCompat.from(context).notify(id.hashCode(), notif)
   }
 
   fun showCountdownInfoNotification(context: Context, id: String, label: String?, targetAtMs: Long) {
@@ -182,13 +208,15 @@ internal object NotificationHelper {
       PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
     )
 
-    val builder = NotificationCompat.Builder(context, CHANNEL_TIMERS)
+    val builder = NotificationCompat.Builder(context, CHANNEL_TIMERS_HIGH)
       .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
       .setContentTitle(title)
       .setContentText(content)
       .setOngoing(true)
       .setOnlyAlertOnce(true)
       .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+      .setCategory(NotificationCompat.CATEGORY_ALARM)
+      .setPriority(NotificationCompat.PRIORITY_HIGH)
       // System chronometer counts down to the alarm time
       .setUsesChronometer(true)
       .setChronometerCountDown(true)

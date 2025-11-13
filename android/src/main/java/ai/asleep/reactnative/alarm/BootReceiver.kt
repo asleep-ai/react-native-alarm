@@ -35,6 +35,8 @@ class BootReceiver : BroadcastReceiver() {
           } catch (_: SecurityException) {
             alarmManager.set(AlarmManager.RTC_WAKEUP, whenMs, pi)
           }
+          // Re-post visible countdown notification on reboot
+          NotificationHelper.showCountdownInfoNotification(context, a.id, a.label, whenMs)
         }
       }
     }

@@ -9,6 +9,7 @@ import android.os.Build
 import androidx.core.app.NotificationManagerCompat
 import android.provider.Settings
 import android.net.Uri
+import android.os.PowerManager
 import expo.modules.kotlin.modules.Module
 import expo.modules.kotlin.modules.ModuleDefinition
 import java.time.Instant
@@ -24,6 +25,25 @@ class ReactNativeAlarmModule : Module() {
     Function("isAlarmKitAvailable") {
       // Android 13+ implementation only
       Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
+    }
+
+    Function("hasOverlayPermission") {
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+        val ctx = appContext.reactContext
+        if (ctx != null) {
+          Settings.canDrawOverlays(ctx)
+        } else {
+          false
+        }
+      } else false
+    }
+
+    Function("isIgnoringBatteryOptimizations") {
+      val ctx = appContext.reactContext
+      if (ctx != null) {
+        val pm = ctx.getSystemService(PowerManager::class.java)
+        pm.isIgnoringBatteryOptimizations(ctx.packageName)
+      } else false
     }
 
     Function("canScheduleExactAlarms") {
@@ -60,6 +80,36 @@ class ReactNativeAlarmModule : Module() {
         }
       }
       enabled
+    }
+
+    AsyncFunction("openOverlayPermissionSettings") {
+      val ctx = appContext.reactContext ?: return@AsyncFunction false
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+        val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION).apply {
+          data = Uri.parse("package:${ctx.packageName}")
+          addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        return@AsyncFunction try {
+          ctx.startActivity(intent)
+          true
+        } catch (e: Exception) {
+          false
+        }
+      } else false
+    }
+
+    AsyncFunction("openBatteryOptimizationSettings") {
+      val ctx = appContext.reactContext ?: return@AsyncFunction false
+      val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
+        data = Uri.parse("package:${ctx.packageName}")
+        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+      }
+      return@AsyncFunction try {
+        ctx.startActivity(intent)
+        true
+      } catch (e: Exception) {
+        false
+      }
     }
 
     AsyncFunction("openExactAlarmSettings") {

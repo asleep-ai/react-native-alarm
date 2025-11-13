@@ -8,8 +8,12 @@ import type {
 declare class ReactNativeAlarmModule extends NativeModule<ReactNativeAlarmEvents> {
   isAlarmKitAvailable(): boolean;
   canScheduleExactAlarms(): boolean;
+  hasOverlayPermission(): boolean;
+  isIgnoringBatteryOptimizations(): boolean;
   requestPermission(): Promise<boolean>;
   openExactAlarmSettings(): Promise<boolean>;
+  openOverlayPermissionSettings(): Promise<boolean>;
+  openBatteryOptimizationSettings(): Promise<boolean>;
   scheduleAlarm(options: ScheduleAlarmOptions): Promise<Alarm>;
   cancelAlarm(id: string): Promise<void>;
   cancelAll(): Promise<void>;

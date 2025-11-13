@@ -1,9 +1,6 @@
 package ai.asleep.reactnative.alarm
 
 import android.app.Activity
-import android.media.AudioAttributes
-import android.media.MediaPlayer
-import android.media.RingtoneManager
 import android.os.Build
 import android.os.Bundle
 import android.view.WindowManager
@@ -12,7 +9,6 @@ import android.widget.LinearLayout
 import android.widget.TextView
 
 class AlarmActivity : Activity() {
-  private var mediaPlayer: MediaPlayer? = null
   private var alarmId: String = "unknown"
   private var label: String? = null
 
@@ -50,33 +46,13 @@ class AlarmActivity : Activity() {
     container.addView(title)
     container.addView(stop)
     setContentView(container)
-
-    startRingtone()
-  }
-
-  private fun startRingtone() {
-    val uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_ALARM)
-    mediaPlayer = MediaPlayer().apply {
-      setDataSource(this@AlarmActivity, uri)
-      setAudioAttributes(
-        AudioAttributes.Builder()
-          .setUsage(AudioAttributes.USAGE_ALARM)
-          .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-          .build()
-      )
-      isLooping = true
-      prepare()
-      start()
-    }
   }
 
   private fun stopAlarmAndFinish() {
-    // Stop audio
-    mediaPlayer?.let {
-      try { it.stop() } catch (_: Throwable) {}
-      try { it.release() } catch (_: Throwable) {}
-    }
-    mediaPlayer = null
+    // Stop ringing service if running
+    try {
+      AlarmRingingService.stop(this)
+    } catch (_: Throwable) {}
     // Dismiss notification if present
     val mgr = getSystemService(android.app.NotificationManager::class.java)
     mgr.cancel(alarmId.hashCode())
@@ -90,11 +66,6 @@ class AlarmActivity : Activity() {
   }
 
   override fun onDestroy() {
-    mediaPlayer?.let {
-      try { it.stop() } catch (_: Throwable) {}
-      try { it.release() } catch (_: Throwable) {}
-    }
-    mediaPlayer = null
     super.onDestroy()
   }
 }

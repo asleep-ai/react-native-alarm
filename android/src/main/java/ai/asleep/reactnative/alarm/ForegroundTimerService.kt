@@ -105,7 +105,7 @@ class ForegroundTimerService : Service() {
 
   private fun finish() {
     val id = timerId ?: "unknown"
-    NotificationHelper.showAlarmAlert(this, id, label)
+    AlarmRingingService.start(this, id, label)
     stopForeground(true)
     stopSelf()
   }

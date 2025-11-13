@@ -10,15 +10,8 @@ class AlarmReceiver : BroadcastReceiver() {
     val label = intent.getStringExtra(EXTRA_LABEL)
     when (intent.action) {
       ACTION_FIRE -> {
-        NotificationHelper.showAlarmAlert(context, id, label)
-        // Fallback: explicitly start AlarmActivity
-        try {
-          val fs = Intent(context, AlarmActivity::class.java)
-            .putExtra(EXTRA_ID, id)
-            .putExtra(EXTRA_LABEL, label)
-            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
-          context.startActivity(fs)
-        } catch (_: Throwable) {}
+        // Start foreground ringing service which posts a full-screen alert and loops sound
+        AlarmRingingService.start(context, id, label)
         // Storage mark enabled=false
         val storage = AlarmStorage(context)
         val items = storage.loadAll().map {

@@ -10,12 +10,28 @@ export function canScheduleExactAlarms(): boolean {
   return ReactNativeAlarmModule.canScheduleExactAlarms();
 }
 
+export function hasOverlayPermission(): boolean {
+  return ReactNativeAlarmModule.hasOverlayPermission();
+}
+
+export function isIgnoringBatteryOptimizations(): boolean {
+  return ReactNativeAlarmModule.isIgnoringBatteryOptimizations();
+}
+
 export async function requestPermission(): Promise<boolean> {
   return ReactNativeAlarmModule.requestPermission();
 }
 
 export async function openExactAlarmSettings(): Promise<boolean> {
   return ReactNativeAlarmModule.openExactAlarmSettings();
+}
+
+export async function openOverlayPermissionSettings(): Promise<boolean> {
+  return ReactNativeAlarmModule.openOverlayPermissionSettings();
+}
+
+export async function openBatteryOptimizationSettings(): Promise<boolean> {
+  return ReactNativeAlarmModule.openBatteryOptimizationSettings();
 }
 
 export async function scheduleAlarm(
