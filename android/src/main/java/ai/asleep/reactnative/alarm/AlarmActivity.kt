@@ -9,6 +9,7 @@ import android.widget.LinearLayout
 import android.widget.TextView
 import android.content.res.ColorStateList
 import android.util.Log
+import android.content.Intent
 
 class AlarmActivity : Activity() {
   private var alarmId: String = "unknown"
@@ -72,6 +73,14 @@ class AlarmActivity : Activity() {
         overlayBtnBgColor?.let { style["overlayButtonBackgroundColor"] = it }
         overlayBtnTextColor?.let { style["overlayButtonTextColor"] = it }
         AlarmRingingService.snooze(this@AlarmActivity, alarmId, label, snoozeMinutes, style)
+        // Bring app's main activity to front instead of showing home
+        try {
+          val launch = packageManager.getLaunchIntentForPackage(packageName)
+          if (launch != null) {
+            launch.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            startActivity(launch)
+          }
+        } catch (_: Throwable) {}
         finish()
       }
       (overlayBtnTextColor ?: overlayTextColor)?.let { try { setTextColor(it) } catch (_: Throwable) {} }
