@@ -38,7 +38,10 @@ class AlarmOverlayService : Service() {
         if (intent.hasExtra(EXTRA_OVERLAY_TEXT)) overlayTextColor = intent.getIntExtra(EXTRA_OVERLAY_TEXT, 0)
         if (intent.hasExtra(EXTRA_OVERLAY_BTN_BG)) overlayBtnBgColor = intent.getIntExtra(EXTRA_OVERLAY_BTN_BG, 0)
         if (intent.hasExtra(EXTRA_OVERLAY_BTN_TEXT)) overlayBtnTextColor = intent.getIntExtra(EXTRA_OVERLAY_BTN_TEXT, 0)
-        if (intent.hasExtra(EXTRA_OVERLAY_SNOOZE_MIN)) snoozeMinutes = intent.getIntExtra(EXTRA_OVERLAY_SNOOZE_MIN, 5)
+        // Read snooze minutes if provided; default to 5
+        snoozeMinutes = if (intent.hasExtra(EXTRA_OVERLAY_SNOOZE_MIN)) {
+          intent.getIntExtra(EXTRA_OVERLAY_SNOOZE_MIN, 5)
+        } else 5
         Log.d("RNAlarm", "OverlayService ACTION_SHOW id=$alarmId label=$label bg=$overlayBgColor text=$overlayTextColor btnBg=$overlayBtnBgColor btnText=$overlayBtnTextColor snoozeMin=$snoozeMinutes canDraw=${canDrawOverlays()}")
         if (canDrawOverlays()) {
           showOverlay()

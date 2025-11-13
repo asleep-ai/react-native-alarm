@@ -45,7 +45,6 @@ export default function App() {
   const [androidOverlayBg, setAndroidOverlayBg] = useState<string>("#000000");
   const [androidOverlayText, setAndroidOverlayText] =
     useState<string>("#FFFFFF");
-  const [androidSnoozeMin, setAndroidSnoozeMin] = useState<string>("5");
   const [androidOverlayBtnBg, setAndroidOverlayBtnBg] =
     useState<string>("#3b82f6");
   const [androidOverlayBtnText, setAndroidOverlayBtnText] =
@@ -115,7 +114,7 @@ export default function App() {
                   overlayTextColor: androidOverlayText,
                   overlayButtonBackgroundColor: androidOverlayBtnBg,
                   overlayButtonTextColor: androidOverlayBtnText,
-                  snoozeMinutes: Number(androidSnoozeMin) || 5,
+                  snoozeMinutes: 5,
                 }
               : undefined,
         });
@@ -170,7 +169,7 @@ export default function App() {
                   overlayTextColor: androidOverlayText,
                   overlayButtonBackgroundColor: androidOverlayBtnBg,
                   overlayButtonTextColor: androidOverlayBtnText,
-                  snoozeMinutes: Number(androidSnoozeMin) || 5,
+                  snoozeMinutes: 5,
                 }
               : undefined,
         });
@@ -208,7 +207,6 @@ export default function App() {
           overlayTextColor: androidOverlayText,
           overlayButtonBackgroundColor: androidOverlayBtnBg,
           overlayButtonTextColor: androidOverlayBtnText,
-          snoozeMinutes: Number(androidSnoozeMin) || 5,
         },
         ios: {
           tintColorHex: iosTint,
@@ -230,7 +228,6 @@ export default function App() {
     androidOverlayText,
     androidOverlayBtnBg,
     androidOverlayBtnText,
-    androidSnoozeMin,
     iosTint,
     iosStopText,
     iosPauseText,
@@ -408,18 +405,6 @@ export default function App() {
                     />
                   ))}
                 </View>
-                <Text>Snooze minutes</Text>
-                <TextInput
-                  value={androidSnoozeMin}
-                  onChangeText={setAndroidSnoozeMin}
-                  placeholder="e.g. 5"
-                  keyboardType="number-pad"
-                  style={{
-                    backgroundColor: "#fff",
-                    padding: 8,
-                    borderRadius: 6,
-                  }}
-                />
                 <TextInput
                   value={androidAccentColor}
                   onChangeText={setAndroidAccentColor}

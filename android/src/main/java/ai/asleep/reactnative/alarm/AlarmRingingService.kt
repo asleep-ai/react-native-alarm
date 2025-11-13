@@ -58,9 +58,10 @@ class AlarmRingingService : Service() {
         if (intent.hasExtra(EXTRA_STYLE_OVERLAY_BTN_TEXT)) {
           overlayBtnTextColor = intent.getIntExtra(EXTRA_STYLE_OVERLAY_BTN_TEXT, 0)
         }
-        if (intent.hasExtra(EXTRA_STYLE_SNOOZE_MIN)) {
-          snoozeMinutes = intent.getIntExtra(EXTRA_STYLE_SNOOZE_MIN, 5)
-        }
+        // Read snooze minutes if provided; default to 5
+        snoozeMinutes = if (intent.hasExtra(EXTRA_STYLE_SNOOZE_MIN)) {
+          intent.getIntExtra(EXTRA_STYLE_SNOOZE_MIN, 5)
+        } else 5
         Log.d("RNAlarm", "RingingService ACTION_RING id=$alarmId label=$label showOverlayWhenUnlocked=$showOverlayWhenUnlocked style=$notifStyle overlayBg=$overlayBgColor overlayText=$overlayTextColor btnBg=$overlayBtnBgColor btnText=$overlayBtnTextColor snoozeMin=$snoozeMinutes")
 
         val km = getSystemService(KeyguardManager::class.java)

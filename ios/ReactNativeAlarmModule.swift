@@ -114,15 +114,8 @@ public class ReactNativeAlarmModule: Module {
       if #available(iOS 26.0, *) {
         // Title for presentations
         let title: LocalizedStringResource = label.isEmpty ? LocalizedStringResource("Alarm") : LocalizedStringResource(stringLiteral: label)
-        // Basic alert presentation with default stop button
+        // Buttons and countdown/paused presentations
         let stopBtn = AlarmButton(text: LocalizedStringResource(stringLiteral: stopText), textColor: .white, systemImageName: "stop.circle")
-        let alert = AlarmPresentation.Alert(
-          title: title,
-          stopButton: stopBtn,
-          secondaryButton: nil,
-          secondaryButtonBehavior: nil
-        )
-        // Provide default countdown and paused presentations so a Live Activity can appear
         let pauseBtn = AlarmButton(text: LocalizedStringResource(stringLiteral: pauseText), textColor: .black, systemImageName: "pause.fill")
         let countdownUI = AlarmPresentation.Countdown(
           title: title,
@@ -132,13 +125,6 @@ public class ReactNativeAlarmModule: Module {
         let pausedUI = AlarmPresentation.Paused(
           title: LocalizedStringResource("Paused"),
           resumeButton: resumeBtn
-        )
-        let presentation = AlarmPresentation(alert: alert, countdown: countdownUI, paused: pausedUI)
-        // Attributes
-        let attributes = AlarmAttributes<RNMetadata>(
-          presentation: presentation,
-          metadata: RNMetadata(),
-          tintColor: (tintHex != nil ? ReactNativeAlarmModule.colorFromHex(tintHex!) : Color.blue)
         )
         // Optional one-time schedule using fixed date if provided
         var schedule: Alarm.Schedule? = nil
@@ -157,17 +143,32 @@ public class ReactNativeAlarmModule: Module {
             effectivePreAlert = diff
           }
         }
+        // Build alert with optional Snooze (repeat) button that returns to countdown
+        let repeatBtn = AlarmButton(text: LocalizedStringResource("Snooze"), textColor: .black, systemImageName: "repeat.circle")
+        let alert = AlarmPresentation.Alert(
+          title: title,
+          stopButton: stopBtn,
+          secondaryButton: (effectivePreAlert != nil ? repeatBtn : nil),
+          secondaryButtonBehavior: (effectivePreAlert != nil ? .countdown : nil)
+        )
+        let presentation = AlarmPresentation(alert: alert, countdown: countdownUI, paused: pausedUI)
+        // Attributes (after presentation is built)
+        let attributes = AlarmAttributes<RNMetadata>(
+          presentation: presentation,
+          metadata: RNMetadata(),
+          tintColor: (tintHex != nil ? ReactNativeAlarmModule.colorFromHex(tintHex!) : Color.blue)
+        )
         // Configuration
         let configuration: AlarmManager.AlarmConfiguration<RNMetadata>
         if let pre = effectivePreAlert, let sch = schedule {
           configuration = AlarmManager.AlarmConfiguration<RNMetadata>(
-            countdownDuration: Alarm.CountdownDuration(preAlert: pre, postAlert: nil),
+            countdownDuration: Alarm.CountdownDuration(preAlert: pre, postAlert: 300),
             schedule: sch,
             attributes: attributes
           )
         } else if let pre = effectivePreAlert {
           configuration = AlarmManager.AlarmConfiguration<RNMetadata>(
-            countdownDuration: Alarm.CountdownDuration(preAlert: pre, postAlert: nil),
+            countdownDuration: Alarm.CountdownDuration(preAlert: pre, postAlert: 300),
             attributes: attributes
           )
         } else if let sch = schedule {

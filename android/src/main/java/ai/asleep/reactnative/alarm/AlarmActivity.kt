@@ -29,7 +29,10 @@ class AlarmActivity : Activity() {
     if (intent.hasExtra(EXTRA_OVERLAY_TEXT)) overlayTextColor = intent.getIntExtra(EXTRA_OVERLAY_TEXT, 0)
     if (intent.hasExtra(EXTRA_OVERLAY_BTN_BG)) overlayBtnBgColor = intent.getIntExtra(EXTRA_OVERLAY_BTN_BG, 0)
     if (intent.hasExtra(EXTRA_OVERLAY_BTN_TEXT)) overlayBtnTextColor = intent.getIntExtra(EXTRA_OVERLAY_BTN_TEXT, 0)
-    if (intent.hasExtra(EXTRA_SNOOZE_MIN)) snoozeMinutes = intent.getIntExtra(EXTRA_SNOOZE_MIN, 5)
+    // Read snooze minutes if provided; default to 5
+    snoozeMinutes = if (intent.hasExtra(EXTRA_SNOOZE_MIN)) {
+      intent.getIntExtra(EXTRA_SNOOZE_MIN, 5)
+    } else 5
     Log.d("RNAlarm", "AlarmActivity onCreate id=$alarmId label=$label bg=$overlayBgColor text=$overlayTextColor btnBg=$overlayBtnBgColor btnText=$overlayBtnTextColor snoozeMin=$snoozeMinutes")
     try { AlarmOverlayService.hide(this) } catch (_: Throwable) {}
 
