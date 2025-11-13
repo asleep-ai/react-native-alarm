@@ -95,7 +95,7 @@ public class ReactNativeAlarmModule: Module {
       if #available(iOS 26.0, *) {
         // Title for presentations
         let title: LocalizedStringResource = label.isEmpty ? LocalizedStringResource("Alarm") : LocalizedStringResource(stringLiteral: label)
-        // Alert presentation with default stop button
+        // Basic alert presentation with default stop button
         let stopBtn = AlarmButton(text: "Done", textColor: .white, systemImageName: "stop.circle")
         let alert = AlarmPresentation.Alert(
           title: title,
@@ -103,23 +103,18 @@ public class ReactNativeAlarmModule: Module {
           secondaryButton: nil,
           secondaryButtonBehavior: nil
         )
-        // Optional countdown/paused presentations
-        let presentation: AlarmPresentation
-        if let seconds = countdownSeconds, seconds > 0 {
-          let pauseBtn = AlarmButton(text: "Pause", textColor: .black, systemImageName: "pause.fill")
-          let countdown = AlarmPresentation.Countdown(
-            title: title,
-            pauseButton: pauseBtn
-          )
-          let resumeBtn = AlarmButton(text: "Start", textColor: .black, systemImageName: "play.fill")
-          let paused = AlarmPresentation.Paused(
-            title: LocalizedStringResource("Paused"),
-            resumeButton: resumeBtn
-          )
-          presentation = AlarmPresentation(alert: alert, countdown: countdown, paused: paused)
-        } else {
-          presentation = AlarmPresentation(alert: alert)
-        }
+        // Provide default countdown and paused presentations so a Live Activity can appear
+        let pauseBtn = AlarmButton(text: "Pause", textColor: .black, systemImageName: "pause.fill")
+        let countdownUI = AlarmPresentation.Countdown(
+          title: title,
+          pauseButton: pauseBtn
+        )
+        let resumeBtn = AlarmButton(text: "Start", textColor: .black, systemImageName: "play.fill")
+        let pausedUI = AlarmPresentation.Paused(
+          title: LocalizedStringResource("Paused"),
+          resumeButton: resumeBtn
+        )
+        let presentation = AlarmPresentation(alert: alert, countdown: countdownUI, paused: pausedUI)
         // Attributes
         let attributes = AlarmAttributes<RNMetadata>(
           presentation: presentation,
@@ -131,17 +126,29 @@ public class ReactNativeAlarmModule: Module {
         if let target = targetDate {
           schedule = .fixed(target)
         }
+        // Determine countdown behavior:
+        // - If countdownSeconds provided, use it
+        // - Else if schedule provided, default to preAlert that counts down until the scheduled time (Live Activity shows immediately)
+        var effectivePreAlert: Double? = nil
+        if let seconds = countdownSeconds, seconds > 0 {
+          effectivePreAlert = seconds
+        } else if let target = targetDate {
+          let diff = target.timeIntervalSinceNow
+          if diff > 0 {
+            effectivePreAlert = diff
+          }
+        }
         // Configuration
         let configuration: AlarmManager.AlarmConfiguration<RNMetadata>
-        if let seconds = countdownSeconds, seconds > 0, let sch = schedule {
+        if let pre = effectivePreAlert, let sch = schedule {
           configuration = AlarmManager.AlarmConfiguration<RNMetadata>(
-            countdownDuration: Alarm.CountdownDuration(preAlert: seconds, postAlert: nil),
+            countdownDuration: Alarm.CountdownDuration(preAlert: pre, postAlert: nil),
             schedule: sch,
             attributes: attributes
           )
-        } else if let seconds = countdownSeconds, seconds > 0 {
+        } else if let pre = effectivePreAlert {
           configuration = AlarmManager.AlarmConfiguration<RNMetadata>(
-            countdownDuration: Alarm.CountdownDuration(preAlert: seconds, postAlert: nil),
+            countdownDuration: Alarm.CountdownDuration(preAlert: pre, postAlert: nil),
             attributes: attributes
           )
         } else if let sch = schedule {
@@ -158,8 +165,8 @@ public class ReactNativeAlarmModule: Module {
         let outISO: String
         if let target = targetDate {
           outISO = isoFormatter.string(from: target)
-        } else if let seconds = countdownSeconds, seconds > 0 {
-          outISO = isoFormatter.string(from: Date().addingTimeInterval(seconds))
+        } else if let pre = effectivePreAlert, pre > 0 {
+          outISO = isoFormatter.string(from: Date().addingTimeInterval(pre))
         } else {
           outISO = ""
         }

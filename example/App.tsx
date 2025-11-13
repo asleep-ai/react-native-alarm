@@ -61,6 +61,8 @@ export default function App() {
         const a = await scheduleAlarm({
           dateISO,
           label: `Test Alarm (${seconds}s)`,
+          // Ensure Live Activity (countdown) appears immediately until the scheduled time.
+          countdownSeconds: seconds,
         });
         setLastScheduled(a);
         await refreshAlarms();
