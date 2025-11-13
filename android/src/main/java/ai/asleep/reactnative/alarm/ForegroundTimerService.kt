@@ -23,6 +23,7 @@ class ForegroundTimerService : Service() {
   private var overlayTextColor: Int? = null
   private var overlayBtnBgColor: Int? = null
   private var overlayBtnTextColor: Int? = null
+  private var snoozeMinutes: Int = 5
   private val logTag = "RNAlarm"
 
   override fun onBind(intent: Intent?): IBinder? = null
@@ -55,7 +56,10 @@ class ForegroundTimerService : Service() {
         if (intent.hasExtra(EXTRA_STYLE_OVERLAY_BTN_TEXT)) {
           overlayBtnTextColor = intent.getIntExtra(EXTRA_STYLE_OVERLAY_BTN_TEXT, 0)
         }
-        android.util.Log.d(logTag, "FGTimer ACTION_START id=$id label=$label seconds=$seconds style=$notifStyle overlayBg=$overlayBgColor overlayText=$overlayTextColor btnBg=$overlayBtnBgColor btnText=$overlayBtnTextColor")
+        if (intent.hasExtra(EXTRA_STYLE_SNOOZE_MIN)) {
+          snoozeMinutes = intent.getIntExtra(EXTRA_STYLE_SNOOZE_MIN, 5)
+        }
+        android.util.Log.d(logTag, "FGTimer ACTION_START id=$id label=$label seconds=$seconds style=$notifStyle overlayBg=$overlayBgColor overlayText=$overlayTextColor btnBg=$overlayBtnBgColor btnText=$overlayBtnTextColor snoozeMin=$snoozeMinutes")
         targetTimeMs = System.currentTimeMillis() + seconds * 1000
         startForegroundInternal(buildNotification())
         tick()
@@ -149,7 +153,8 @@ class ForegroundTimerService : Service() {
       "overlayBackgroundColor" to overlayBgColor,
       "overlayTextColor" to overlayTextColor,
       "overlayButtonBackgroundColor" to overlayBtnBgColor,
-      "overlayButtonTextColor" to overlayBtnTextColor
+      "overlayButtonTextColor" to overlayBtnTextColor,
+      "snoozeMinutes" to snoozeMinutes
     )
     AlarmRingingService.start(this, id, label, styleMap)
     stopForeground(true)
@@ -181,6 +186,7 @@ class ForegroundTimerService : Service() {
     const val EXTRA_STYLE_OVERLAY_TEXT = "style_overlay_text"
     const val EXTRA_STYLE_OVERLAY_BTN_BG = "style_overlay_btn_bg"
     const val EXTRA_STYLE_OVERLAY_BTN_TEXT = "style_overlay_btn_text"
+    const val EXTRA_STYLE_SNOOZE_MIN = "style_snooze_min"
 
     fun start(context: Context, id: String, label: String?, seconds: Long, style: Map<String, Any?>) {
       val intent = Intent(context, ForegroundTimerService::class.java)
@@ -197,10 +203,16 @@ class ForegroundTimerService : Service() {
       (style["overlayTextColor"] as? Int)?.let { intent.putExtra(EXTRA_STYLE_OVERLAY_TEXT, it) }
       (style["overlayButtonBackgroundColor"] as? Int)?.let { intent.putExtra(EXTRA_STYLE_OVERLAY_BTN_BG, it) }
       (style["overlayButtonTextColor"] as? Int)?.let { intent.putExtra(EXTRA_STYLE_OVERLAY_BTN_TEXT, it) }
-      if (Build.VERSION.SDK_INT >= 26) {
-        context.startForegroundService(intent)
-      } else {
+      (style["snoozeMinutes"] as? Int)?.let { intent.putExtra(EXTRA_STYLE_SNOOZE_MIN, it) }
+      // Prefer startService (app usually foreground). Fall back to FGS if needed.
+      try {
         context.startService(intent)
+      } catch (e: IllegalStateException) {
+        if (Build.VERSION.SDK_INT >= 26) {
+          context.startForegroundService(intent)
+        } else {
+          throw e
+        }
       }
     }
   }

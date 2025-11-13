@@ -42,6 +42,7 @@ export type AndroidNotificationStyle = {
   overlayTextColor?: string; // hex, overlay title text color
   overlayButtonBackgroundColor?: string; // hex, overlay button background
   overlayButtonTextColor?: string; // hex, overlay button text color
+  snoozeMinutes?: number; // default 5
 };
 
 export type IOSAlarmStyle = {

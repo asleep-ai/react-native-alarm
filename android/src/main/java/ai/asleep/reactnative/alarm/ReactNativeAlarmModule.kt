@@ -288,6 +288,7 @@ class ReactNativeAlarmModule : Module() {
     s.overlayTextColor?.let { fireIntent.putExtra(AlarmRingingService.EXTRA_STYLE_OVERLAY_TEXT, it) }
     s.overlayButtonBackgroundColor?.let { fireIntent.putExtra(AlarmRingingService.EXTRA_STYLE_OVERLAY_BTN_BG, it) }
     s.overlayButtonTextColor?.let { fireIntent.putExtra(AlarmRingingService.EXTRA_STYLE_OVERLAY_BTN_TEXT, it) }
+    fireIntent.putExtra(AlarmRingingService.EXTRA_STYLE_SNOOZE_MIN, s.snoozeMinutes)
     val firePi = PendingIntent.getBroadcast(
       context,
       id.hashCode(),
@@ -330,7 +331,8 @@ data class AndroidStyle(
   val overlayBackgroundColor: Int? = null,
   val overlayTextColor: Int? = null,
   val overlayButtonBackgroundColor: Int? = null,
-  val overlayButtonTextColor: Int? = null
+  val overlayButtonTextColor: Int? = null,
+  val snoozeMinutes: Int = 5
 )
 
 object ConfigHolder {
@@ -356,6 +358,7 @@ object ConfigHolder {
     val overlayTextHex = (map["overlayTextColor"] as? String)
     val overlayBtnBgHex = (map["overlayButtonBackgroundColor"] as? String)
     val overlayBtnTextHex = (map["overlayButtonTextColor"] as? String)
+    val snoozeMinutes = (map["snoozeMinutes"] as? Number)?.toInt()
     return AndroidStyle(
       timerChannelId = timerChannelId ?: NotificationHelper.CHANNEL_TIMERS_HIGH,
       alertChannelId = alertChannelId ?: NotificationHelper.CHANNEL_ALERTS,
@@ -366,7 +369,8 @@ object ConfigHolder {
       overlayBackgroundColor = overlayBgHex?.let { parseColor(it) },
       overlayTextColor = overlayTextHex?.let { parseColor(it) },
       overlayButtonBackgroundColor = overlayBtnBgHex?.let { parseColor(it) },
-      overlayButtonTextColor = overlayBtnTextHex?.let { parseColor(it) }
+      overlayButtonTextColor = overlayBtnTextHex?.let { parseColor(it) },
+      snoozeMinutes = snoozeMinutes ?: 5
     )
   }
 
@@ -381,7 +385,8 @@ object ConfigHolder {
       overlayBackgroundColor = inc.overlayBackgroundColor ?: base.overlayBackgroundColor,
       overlayTextColor = inc.overlayTextColor ?: base.overlayTextColor,
       overlayButtonBackgroundColor = inc.overlayButtonBackgroundColor ?: base.overlayButtonBackgroundColor,
-      overlayButtonTextColor = inc.overlayButtonTextColor ?: base.overlayButtonTextColor
+      overlayButtonTextColor = inc.overlayButtonTextColor ?: base.overlayButtonTextColor,
+      snoozeMinutes = if (inc.snoozeMinutes != 5) inc.snoozeMinutes else base.snoozeMinutes
     )
   }
 
@@ -405,6 +410,7 @@ fun styleToMap(s: AndroidStyle): Map<String, Any?> {
   s.overlayTextColor?.let { out["overlayTextColor"] = it }
   s.overlayButtonBackgroundColor?.let { out["overlayButtonBackgroundColor"] = it }
   s.overlayButtonTextColor?.let { out["overlayButtonTextColor"] = it }
+  out["snoozeMinutes"] = s.snoozeMinutes
   return out
 }
 

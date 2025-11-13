@@ -20,7 +20,8 @@ class AlarmReceiver : BroadcastReceiver() {
           intent.hasExtra(AlarmRingingService.EXTRA_STYLE_OVERLAY_BG) ||
           intent.hasExtra(AlarmRingingService.EXTRA_STYLE_OVERLAY_TEXT) ||
           intent.hasExtra(AlarmRingingService.EXTRA_STYLE_OVERLAY_BTN_BG) ||
-          intent.hasExtra(AlarmRingingService.EXTRA_STYLE_OVERLAY_BTN_TEXT)
+          intent.hasExtra(AlarmRingingService.EXTRA_STYLE_OVERLAY_BTN_TEXT) ||
+          intent.hasExtra(AlarmRingingService.EXTRA_STYLE_SNOOZE_MIN)
         if (hasStyleExtras) {
           intent.getStringExtra(AlarmRingingService.EXTRA_STYLE_TIMER_CHANNEL_ID)?.let {
             styleMap["timerChannelId"] = it
@@ -53,6 +54,10 @@ class AlarmReceiver : BroadcastReceiver() {
           if (intent.hasExtra(AlarmRingingService.EXTRA_STYLE_OVERLAY_BTN_TEXT)) {
             styleMap["overlayButtonTextColor"] =
               intent.getIntExtra(AlarmRingingService.EXTRA_STYLE_OVERLAY_BTN_TEXT, 0)
+          }
+          if (intent.hasExtra(AlarmRingingService.EXTRA_STYLE_SNOOZE_MIN)) {
+            styleMap["snoozeMinutes"] =
+              intent.getIntExtra(AlarmRingingService.EXTRA_STYLE_SNOOZE_MIN, 5)
           }
         } else {
           try {

@@ -25,6 +25,7 @@ class AlarmOverlayService : Service() {
   private var overlayTextColor: Int? = null
   private var overlayBtnBgColor: Int? = null
   private var overlayBtnTextColor: Int? = null
+  private var snoozeMinutes: Int = 5
 
   override fun onBind(intent: Intent?): IBinder? = null
 
@@ -37,7 +38,8 @@ class AlarmOverlayService : Service() {
         if (intent.hasExtra(EXTRA_OVERLAY_TEXT)) overlayTextColor = intent.getIntExtra(EXTRA_OVERLAY_TEXT, 0)
         if (intent.hasExtra(EXTRA_OVERLAY_BTN_BG)) overlayBtnBgColor = intent.getIntExtra(EXTRA_OVERLAY_BTN_BG, 0)
         if (intent.hasExtra(EXTRA_OVERLAY_BTN_TEXT)) overlayBtnTextColor = intent.getIntExtra(EXTRA_OVERLAY_BTN_TEXT, 0)
-        Log.d("RNAlarm", "OverlayService ACTION_SHOW id=$alarmId label=$label bg=$overlayBgColor text=$overlayTextColor btnBg=$overlayBtnBgColor btnText=$overlayBtnTextColor canDraw=${canDrawOverlays()}")
+        if (intent.hasExtra(EXTRA_OVERLAY_SNOOZE_MIN)) snoozeMinutes = intent.getIntExtra(EXTRA_OVERLAY_SNOOZE_MIN, 5)
+        Log.d("RNAlarm", "OverlayService ACTION_SHOW id=$alarmId label=$label bg=$overlayBgColor text=$overlayTextColor btnBg=$overlayBtnBgColor btnText=$overlayBtnTextColor snoozeMin=$snoozeMinutes canDraw=${canDrawOverlays()}")
         if (canDrawOverlays()) {
           showOverlay()
         }
@@ -67,6 +69,24 @@ class AlarmOverlayService : Service() {
       setPadding(60, 80, 60, 80)
       setBackgroundColor(overlayBgColor ?: 0xCC000000.toInt()) // semi-transparent if not provided
       keepScreenOn = true
+      isClickable = true
+      isFocusable = true
+    }
+    container.setOnClickListener {
+      try {
+        val fs = Intent(this, AlarmActivity::class.java)
+          .putExtra(AlarmReceiver.EXTRA_ID, alarmId)
+          .putExtra(AlarmReceiver.EXTRA_LABEL, label)
+          .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+        overlayBgColor?.let { fs.putExtra(AlarmActivity.EXTRA_OVERLAY_BG, it) }
+        overlayTextColor?.let { fs.putExtra(AlarmActivity.EXTRA_OVERLAY_TEXT, it) }
+        overlayBtnBgColor?.let { fs.putExtra(AlarmActivity.EXTRA_OVERLAY_BTN_BG, it) }
+        overlayBtnTextColor?.let { fs.putExtra(AlarmActivity.EXTRA_OVERLAY_BTN_TEXT, it) }
+        fs.putExtra(AlarmActivity.EXTRA_SNOOZE_MIN, snoozeMinutes)
+        startActivity(fs)
+      } catch (_: Throwable) {}
+      hideOverlay()
+      stopSelf()
     }
     val title = TextView(this).apply {
       textSize = 22f
@@ -85,7 +105,25 @@ class AlarmOverlayService : Service() {
         stopSelf()
       }
     }
+    val snooze = Button(this).apply {
+      text = "Snooze"
+      (overlayBtnTextColor ?: overlayTextColor)?.let { try { setTextColor(it) } catch (_: Throwable) {} }
+      overlayBtnBgColor?.let { c ->
+        try { backgroundTintList = ColorStateList.valueOf(c) } catch (_: Throwable) {}
+      }
+      setOnClickListener {
+        val style = mutableMapOf<String, Any?>()
+        overlayBgColor?.let { style["overlayBackgroundColor"] = it }
+        overlayTextColor?.let { style["overlayTextColor"] = it }
+        overlayBtnBgColor?.let { style["overlayButtonBackgroundColor"] = it }
+        overlayBtnTextColor?.let { style["overlayButtonTextColor"] = it }
+        AlarmRingingService.snooze(this@AlarmOverlayService, alarmId, label, snoozeMinutes, style)
+        hideOverlay()
+        stopSelf()
+      }
+    }
     container.addView(title)
+    container.addView(snooze)
     container.addView(stop)
     overlayView = container
 
@@ -130,6 +168,7 @@ class AlarmOverlayService : Service() {
     const val EXTRA_OVERLAY_TEXT = "extra_overlay_text"
     const val EXTRA_OVERLAY_BTN_BG = "extra_overlay_btn_bg"
     const val EXTRA_OVERLAY_BTN_TEXT = "extra_overlay_btn_text"
+    const val EXTRA_OVERLAY_SNOOZE_MIN = "extra_overlay_snooze_min"
 
     fun show(context: Context, id: String, label: String?, style: Map<String, Any?>? = null) {
       val i = Intent(context, AlarmOverlayService::class.java)
@@ -141,13 +180,12 @@ class AlarmOverlayService : Service() {
         (style["overlayTextColor"] as? Int)?.let { i.putExtra(EXTRA_OVERLAY_TEXT, it) }
         (style["overlayButtonBackgroundColor"] as? Int)?.let { i.putExtra(EXTRA_OVERLAY_BTN_BG, it) }
         (style["overlayButtonTextColor"] as? Int)?.let { i.putExtra(EXTRA_OVERLAY_BTN_TEXT, it) }
-        Log.d("RNAlarm", "OverlayService.show() id=$id label=$label styleBg=${style["overlayBackgroundColor"]} styleText=${style["overlayTextColor"]} btnBg=${style["overlayButtonBackgroundColor"]} btnText=${style["overlayButtonTextColor"]}")
+        (style["snoozeMinutes"] as? Int)?.let { i.putExtra(EXTRA_OVERLAY_SNOOZE_MIN, it) }
+        Log.d("RNAlarm", "OverlayService.show() id=$id label=$label styleBg=${style["overlayBackgroundColor"]} styleText=${style["overlayTextColor"]} btnBg=${style["overlayButtonBackgroundColor"]} btnText=${style["overlayButtonTextColor"]} snoozeMin=${style["snoozeMinutes"]}")
       }
-      if (Build.VERSION.SDK_INT >= 26) {
-        context.startForegroundService(i)
-      } else {
-        context.startService(i)
-      }
+      // Always use startService; this overlay service does not post a foreground notification.
+      // It's started from a foreground ringing service, so it's allowed without FGS.
+      context.startService(i)
     }
 
     fun hide(context: Context) {

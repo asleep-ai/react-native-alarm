@@ -17,6 +17,7 @@ class AlarmActivity : Activity() {
   private var overlayTextColor: Int? = null
   private var overlayBtnBgColor: Int? = null
   private var overlayBtnTextColor: Int? = null
+  private var snoozeMinutes: Int = 5
 
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
@@ -27,7 +28,9 @@ class AlarmActivity : Activity() {
     if (intent.hasExtra(EXTRA_OVERLAY_TEXT)) overlayTextColor = intent.getIntExtra(EXTRA_OVERLAY_TEXT, 0)
     if (intent.hasExtra(EXTRA_OVERLAY_BTN_BG)) overlayBtnBgColor = intent.getIntExtra(EXTRA_OVERLAY_BTN_BG, 0)
     if (intent.hasExtra(EXTRA_OVERLAY_BTN_TEXT)) overlayBtnTextColor = intent.getIntExtra(EXTRA_OVERLAY_BTN_TEXT, 0)
-    Log.d("RNAlarm", "AlarmActivity onCreate id=$alarmId label=$label bg=$overlayBgColor text=$overlayTextColor btnBg=$overlayBtnBgColor btnText=$overlayBtnTextColor")
+    if (intent.hasExtra(EXTRA_SNOOZE_MIN)) snoozeMinutes = intent.getIntExtra(EXTRA_SNOOZE_MIN, 5)
+    Log.d("RNAlarm", "AlarmActivity onCreate id=$alarmId label=$label bg=$overlayBgColor text=$overlayTextColor btnBg=$overlayBtnBgColor btnText=$overlayBtnTextColor snoozeMin=$snoozeMinutes")
+    try { AlarmOverlayService.hide(this) } catch (_: Throwable) {}
 
     // Ensure screen turns on and shows above lock screen
     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
@@ -60,7 +63,24 @@ class AlarmActivity : Activity() {
         try { backgroundTintList = ColorStateList.valueOf(c) } catch (_: Throwable) {}
       }
     }
+    val snooze = Button(this).apply {
+      text = "Snooze"
+      setOnClickListener {
+        val style = mutableMapOf<String, Any?>()
+        overlayBgColor?.let { style["overlayBackgroundColor"] = it }
+        overlayTextColor?.let { style["overlayTextColor"] = it }
+        overlayBtnBgColor?.let { style["overlayButtonBackgroundColor"] = it }
+        overlayBtnTextColor?.let { style["overlayButtonTextColor"] = it }
+        AlarmRingingService.snooze(this@AlarmActivity, alarmId, label, snoozeMinutes, style)
+        finish()
+      }
+      (overlayBtnTextColor ?: overlayTextColor)?.let { try { setTextColor(it) } catch (_: Throwable) {} }
+      overlayBtnBgColor?.let { c ->
+        try { backgroundTintList = ColorStateList.valueOf(c) } catch (_: Throwable) {}
+      }
+    }
     container.addView(title)
+    container.addView(snooze)
     container.addView(stop)
     setContentView(container)
     Log.d("RNAlarm", "AlarmActivity content set with bgApplied=${overlayBgColor != null} textApplied=${overlayTextColor != null}")
@@ -92,6 +112,7 @@ class AlarmActivity : Activity() {
     const val EXTRA_OVERLAY_TEXT = "alarm_activity_overlay_text"
     const val EXTRA_OVERLAY_BTN_BG = "alarm_activity_overlay_btn_bg"
     const val EXTRA_OVERLAY_BTN_TEXT = "alarm_activity_overlay_btn_text"
+    const val EXTRA_SNOOZE_MIN = "alarm_activity_snooze_min"
   }
 }
 

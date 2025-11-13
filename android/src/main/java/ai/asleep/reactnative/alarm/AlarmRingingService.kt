@@ -28,6 +28,7 @@ class AlarmRingingService : Service() {
   private var overlayTextColor: Int? = null
   private var overlayBtnBgColor: Int? = null
   private var overlayBtnTextColor: Int? = null
+  private var snoozeMinutes: Int = 5
 
   override fun onBind(intent: Intent?): IBinder? = null
 
@@ -57,7 +58,10 @@ class AlarmRingingService : Service() {
         if (intent.hasExtra(EXTRA_STYLE_OVERLAY_BTN_TEXT)) {
           overlayBtnTextColor = intent.getIntExtra(EXTRA_STYLE_OVERLAY_BTN_TEXT, 0)
         }
-        Log.d("RNAlarm", "RingingService ACTION_RING id=$alarmId label=$label showOverlayWhenUnlocked=$showOverlayWhenUnlocked style=$notifStyle overlayBg=$overlayBgColor overlayText=$overlayTextColor btnBg=$overlayBtnBgColor btnText=$overlayBtnTextColor")
+        if (intent.hasExtra(EXTRA_STYLE_SNOOZE_MIN)) {
+          snoozeMinutes = intent.getIntExtra(EXTRA_STYLE_SNOOZE_MIN, 5)
+        }
+        Log.d("RNAlarm", "RingingService ACTION_RING id=$alarmId label=$label showOverlayWhenUnlocked=$showOverlayWhenUnlocked style=$notifStyle overlayBg=$overlayBgColor overlayText=$overlayTextColor btnBg=$overlayBtnBgColor btnText=$overlayBtnTextColor snoozeMin=$snoozeMinutes")
 
         val km = getSystemService(KeyguardManager::class.java)
         val pm = getSystemService(PowerManager::class.java)
@@ -82,6 +86,7 @@ class AlarmRingingService : Service() {
         if (shouldFullScreen) {
           // Lock screen or not interactive: show full-screen activity only
           try {
+            try { AlarmOverlayService.hide(this) } catch (_: Throwable) {}
             val fs = Intent(this, AlarmActivity::class.java)
               .putExtra(AlarmReceiver.EXTRA_ID, alarmId)
               .putExtra(AlarmReceiver.EXTRA_LABEL, label)
@@ -99,6 +104,7 @@ class AlarmRingingService : Service() {
             if (intent.hasExtra(EXTRA_STYLE_OVERLAY_BTN_TEXT)) {
               fs.putExtra(AlarmActivity.EXTRA_OVERLAY_BTN_TEXT, intent.getIntExtra(EXTRA_STYLE_OVERLAY_BTN_TEXT, 0))
             }
+            fs.putExtra(AlarmActivity.EXTRA_SNOOZE_MIN, snoozeMinutes)
             Log.d("RNAlarm", "RingingService startActivity AlarmActivity with bg=$overlayBgColor text=$overlayTextColor")
             startActivity(fs)
           } catch (_: Throwable) {}
@@ -124,6 +130,7 @@ class AlarmRingingService : Service() {
               if (intent.hasExtra(EXTRA_STYLE_OVERLAY_BTN_TEXT)) {
                 styleMap["overlayButtonTextColor"] = intent.getIntExtra(EXTRA_STYLE_OVERLAY_BTN_TEXT, 0)
               }
+              styleMap["snoozeMinutes"] = snoozeMinutes
               Log.d("RNAlarm", "RingingService show overlay with styleMap bg=${styleMap["overlayBackgroundColor"]} text=${styleMap["overlayTextColor"]} btnBg=${styleMap["overlayButtonBackgroundColor"]} btnText=${styleMap["overlayButtonTextColor"]}")
               AlarmOverlayService.show(this, alarmId, label, styleMap)
             } else {
@@ -144,6 +151,7 @@ class AlarmRingingService : Service() {
               if (intent.hasExtra(EXTRA_STYLE_OVERLAY_BTN_TEXT)) {
                 fs.putExtra(AlarmActivity.EXTRA_OVERLAY_BTN_TEXT, intent.getIntExtra(EXTRA_STYLE_OVERLAY_BTN_TEXT, 0))
               }
+              fs.putExtra(AlarmActivity.EXTRA_SNOOZE_MIN, snoozeMinutes)
               Log.d("RNAlarm", "RingingService fallback AlarmActivity with bg=$overlayBgColor text=$overlayTextColor overlayPerm=${Settings.canDrawOverlays(this)} showOverlayWhenUnlocked=$showOverlayWhenUnlocked")
               startActivity(fs)
             }
@@ -222,6 +230,7 @@ class AlarmRingingService : Service() {
     const val EXTRA_STYLE_OVERLAY_TEXT = "style_overlay_text"
     const val EXTRA_STYLE_OVERLAY_BTN_BG = "style_overlay_btn_bg"
     const val EXTRA_STYLE_OVERLAY_BTN_TEXT = "style_overlay_btn_text"
+    const val EXTRA_STYLE_SNOOZE_MIN = "style_snooze_min"
 
     fun start(context: Context, id: String, label: String?, style: Map<String, Any?>? = null) {
       val i = Intent(context, AlarmRingingService::class.java)
@@ -240,6 +249,7 @@ class AlarmRingingService : Service() {
         (style["overlayTextColor"] as? Int)?.let { i.putExtra(EXTRA_STYLE_OVERLAY_TEXT, it) }
         (style["overlayButtonBackgroundColor"] as? Int)?.let { i.putExtra(EXTRA_STYLE_OVERLAY_BTN_BG, it) }
         (style["overlayButtonTextColor"] as? Int)?.let { i.putExtra(EXTRA_STYLE_OVERLAY_BTN_TEXT, it) }
+        (style["snoozeMinutes"] as? Int)?.let { i.putExtra(EXTRA_STYLE_SNOOZE_MIN, it) }
       }
       if (Build.VERSION.SDK_INT >= 26) {
         context.startForegroundService(i)
@@ -252,6 +262,52 @@ class AlarmRingingService : Service() {
       val i = Intent(context, AlarmRingingService::class.java)
         .setAction(ACTION_STOP)
       context.startService(i)
+    }
+
+    fun snooze(context: Context, id: String, label: String?, minutes: Int, style: Map<String, Any?>? = null) {
+      try {
+        // Hide any overlay and stop current ringing
+        try { AlarmOverlayService.hide(context) } catch (_: Throwable) {}
+        val triggerAt = System.currentTimeMillis() + minutes * 60_000L
+        val fireIntent = Intent(context, AlarmReceiver::class.java)
+          .setAction(AlarmReceiver.ACTION_FIRE)
+          .putExtra(AlarmReceiver.EXTRA_ID, id)
+          .putExtra(AlarmReceiver.EXTRA_LABEL, label)
+        // Persist style for next ring
+        if (style != null) {
+          (style["timerChannelId"] as? String)?.let { fireIntent.putExtra(EXTRA_STYLE_TIMER_CHANNEL_ID, it) }
+          (style["alertChannelId"] as? String)?.let { fireIntent.putExtra(EXTRA_STYLE_ALERT_CHANNEL_ID, it) }
+          (style["smallIconName"] as? String)?.let { fireIntent.putExtra(EXTRA_STYLE_SMALL_ICON, it) }
+          (style["accentColor"] as? Int)?.let { fireIntent.putExtra(EXTRA_STYLE_ACCENT_COLOR, it) }
+          (style["useChronometer"] as? Boolean)?.let { fireIntent.putExtra(EXTRA_STYLE_USE_CHRONOMETER, it) }
+          (style["showOverlayWhenUnlocked"] as? Boolean)?.let { fireIntent.putExtra(EXTRA_STYLE_SHOW_OVERLAY, it) }
+          (style["overlayBackgroundColor"] as? Int)?.let { fireIntent.putExtra(EXTRA_STYLE_OVERLAY_BG, it) }
+          (style["overlayTextColor"] as? Int)?.let { fireIntent.putExtra(EXTRA_STYLE_OVERLAY_TEXT, it) }
+          (style["overlayButtonBackgroundColor"] as? Int)?.let { fireIntent.putExtra(EXTRA_STYLE_OVERLAY_BTN_BG, it) }
+          (style["overlayButtonTextColor"] as? Int)?.let { fireIntent.putExtra(EXTRA_STYLE_OVERLAY_BTN_TEXT, it) }
+          (style["snoozeMinutes"] as? Int)?.let { fireIntent.putExtra(EXTRA_STYLE_SNOOZE_MIN, it) }
+        }
+        val pi = android.app.PendingIntent.getBroadcast(
+          context,
+          id.hashCode(),
+          fireIntent,
+          android.app.PendingIntent.FLAG_UPDATE_CURRENT or android.app.PendingIntent.FLAG_IMMUTABLE
+        )
+        val am = context.getSystemService(android.app.AlarmManager::class.java)
+        try {
+          val info = android.app.AlarmManager.AlarmClockInfo(triggerAt, pi)
+          am.setAlarmClock(info, pi)
+        } catch (_: SecurityException) {
+          am.set(android.app.AlarmManager.RTC_WAKEUP, triggerAt, pi)
+        }
+        // Show info notification for snoozed time
+        NotificationHelper.showCountdownInfoNotification(
+          context, id, label, triggerAt, NotificationHelper.Style()
+        )
+      } finally {
+        // Stop current ringing service
+        stop(context)
+      }
     }
   }
 }
