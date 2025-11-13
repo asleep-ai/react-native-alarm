@@ -15,7 +15,7 @@ class ForegroundTimerService : Service() {
 
   private var timerId: String? = null
   private var label: String? = null
-  private var targetElapsedRealtime: Long = 0L
+  private var targetTimeMs: Long = 0L
   private var remainingWhenPaused: Long = 0L
   private var isPaused: Boolean = false
 
@@ -29,14 +29,14 @@ class ForegroundTimerService : Service() {
         label = intent.getStringExtra(EXTRA_LABEL)
         timerId = id
         isPaused = false
-        targetElapsedRealtime = System.currentTimeMillis() + seconds * 1000
+        targetTimeMs = System.currentTimeMillis() + seconds * 1000
         startForegroundInternal(buildNotification())
         tick()
       }
       ACTION_PAUSE -> {
         if (!isPaused) {
           val now = System.currentTimeMillis()
-          remainingWhenPaused = ((targetElapsedRealtime - now) / 1000).coerceAtLeast(0)
+          remainingWhenPaused = ((targetTimeMs - now) / 1000).coerceAtLeast(0)
           isPaused = true
           updateNotification()
         }
@@ -44,7 +44,7 @@ class ForegroundTimerService : Service() {
       ACTION_RESUME -> {
         if (isPaused) {
           val now = System.currentTimeMillis()
-          targetElapsedRealtime = now + remainingWhenPaused * 1000
+          targetTimeMs = now + remainingWhenPaused * 1000
           isPaused = false
           updateNotification()
           tick()
@@ -87,7 +87,7 @@ class ForegroundTimerService : Service() {
       remainingWhenPaused
     } else {
       val now = System.currentTimeMillis()
-      ((targetElapsedRealtime - now) / 1000).coerceAtLeast(0)
+      ((targetTimeMs - now) / 1000).coerceAtLeast(0)
     }
   }
 

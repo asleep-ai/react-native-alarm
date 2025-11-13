@@ -105,6 +105,8 @@ class ReactNativeAlarmModule : Module() {
         if (triggerAt != null && triggerAt > System.currentTimeMillis()) {
           scheduleExactAlarm(ctx, id, label, triggerAt)
           outISO = dateISO
+          // Show live countdown notification without FGS (chronometer-based)
+          NotificationHelper.showCountdownInfoNotification(ctx, id, label, triggerAt)
         }
       }
 

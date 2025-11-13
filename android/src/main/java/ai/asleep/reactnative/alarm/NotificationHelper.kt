@@ -12,6 +12,8 @@ import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import android.app.TaskStackBuilder
+import java.text.DateFormat
+import java.util.Date
 
 internal object NotificationHelper {
   const val CHANNEL_TIMERS = "react_native_alarm_timers"
@@ -65,6 +67,7 @@ internal object NotificationHelper {
     } else {
       "Time remaining: ${formatDuration(remainingSeconds)}"
     }
+    val finishAtMs = System.currentTimeMillis() + remainingSeconds * 1000
 
     val pauseIntent = Intent(context, ForegroundTimerService::class.java)
       .setAction(ForegroundTimerService.ACTION_PAUSE)
@@ -102,6 +105,10 @@ internal object NotificationHelper {
       .setOngoing(true)
       .setOnlyAlertOnce(true)
       .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+      // Live countdown in the notification (system-updated chronometer)
+      .setUsesChronometer(!isPaused)
+      .setChronometerCountDown(true)
+      .setWhen(finishAtMs)
 
     if (isPaused) {
       builder.addAction(0, "Resume", resumePi)
@@ -154,6 +161,41 @@ internal object NotificationHelper {
       .addAction(0, "Dismiss", dismissPi)
 
     NotificationManagerCompat.from(context).notify(id.hashCode(), builder.build())
+  }
+
+  fun showCountdownInfoNotification(context: Context, id: String, label: String?, targetAtMs: Long) {
+    ensureChannels(context)
+    val title = if (!label.isNullOrBlank()) label else "Alarm"
+    val timeText = DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(targetAtMs))
+    val content = "Rings at $timeText"
+
+    // Tapping opens AlarmActivity pre-armed to Stop if already ringing
+    val fsIntent = Intent(context, AlarmActivity::class.java).apply {
+      putExtra(AlarmReceiver.EXTRA_ID, id)
+      putExtra(AlarmReceiver.EXTRA_LABEL, label)
+    }
+    val stack = TaskStackBuilder.create(context).apply {
+      addNextIntentWithParentStack(fsIntent)
+    }
+    val pi = stack.getPendingIntent(
+      (id + ":info").hashCode(),
+      PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+    )
+
+    val builder = NotificationCompat.Builder(context, CHANNEL_TIMERS)
+      .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
+      .setContentTitle(title)
+      .setContentText(content)
+      .setOngoing(true)
+      .setOnlyAlertOnce(true)
+      .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+      // System chronometer counts down to the alarm time
+      .setUsesChronometer(true)
+      .setChronometerCountDown(true)
+      .setWhen(targetAtMs)
+      .setContentIntent(pi)
+
+    NotificationManagerCompat.from(context).notify((id + ":info").hashCode(), builder.build())
   }
 
   private fun formatDuration(totalSeconds: Long): String {
