@@ -14,12 +14,20 @@ import android.provider.Settings
 import androidx.core.app.NotificationManagerCompat
 import android.app.KeyguardManager
 import android.os.PowerManager
+import android.graphics.Color
+import android.util.Log
 
 class AlarmRingingService : Service() {
   private var mediaPlayer: MediaPlayer? = null
   private var alarmId: String = "unknown"
   private var label: String? = null
   private var isRinging: Boolean = false
+  private var notifStyle: NotificationHelper.Style = NotificationHelper.Style()
+  private var showOverlayWhenUnlocked: Boolean = true
+  private var overlayBgColor: Int? = null
+  private var overlayTextColor: Int? = null
+  private var overlayBtnBgColor: Int? = null
+  private var overlayBtnTextColor: Int? = null
 
   override fun onBind(intent: Intent?): IBinder? = null
 
@@ -28,11 +36,35 @@ class AlarmRingingService : Service() {
       ACTION_RING -> {
         alarmId = intent.getStringExtra(EXTRA_ID) ?: "unknown"
         label = intent.getStringExtra(EXTRA_LABEL)
+        // Read optional style extras
+        notifStyle = NotificationHelper.Style(
+          timerChannelId = intent.getStringExtra(EXTRA_STYLE_TIMER_CHANNEL_ID) ?: NotificationHelper.CHANNEL_TIMERS_HIGH,
+          alertChannelId = intent.getStringExtra(EXTRA_STYLE_ALERT_CHANNEL_ID) ?: NotificationHelper.CHANNEL_ALERTS,
+          smallIconName = intent.getStringExtra(EXTRA_STYLE_SMALL_ICON),
+          accentColor = if (intent.hasExtra(EXTRA_STYLE_ACCENT_COLOR)) intent.getIntExtra(EXTRA_STYLE_ACCENT_COLOR, 0) else null,
+          useChronometer = intent.getBooleanExtra(EXTRA_STYLE_USE_CHRONOMETER, true)
+        )
+        showOverlayWhenUnlocked = intent.getBooleanExtra(EXTRA_STYLE_SHOW_OVERLAY, true)
+        if (intent.hasExtra(EXTRA_STYLE_OVERLAY_BG)) {
+          overlayBgColor = intent.getIntExtra(EXTRA_STYLE_OVERLAY_BG, 0)
+        }
+        if (intent.hasExtra(EXTRA_STYLE_OVERLAY_TEXT)) {
+          overlayTextColor = intent.getIntExtra(EXTRA_STYLE_OVERLAY_TEXT, 0)
+        }
+        if (intent.hasExtra(EXTRA_STYLE_OVERLAY_BTN_BG)) {
+          overlayBtnBgColor = intent.getIntExtra(EXTRA_STYLE_OVERLAY_BTN_BG, 0)
+        }
+        if (intent.hasExtra(EXTRA_STYLE_OVERLAY_BTN_TEXT)) {
+          overlayBtnTextColor = intent.getIntExtra(EXTRA_STYLE_OVERLAY_BTN_TEXT, 0)
+        }
+        Log.d("RNAlarm", "RingingService ACTION_RING id=$alarmId label=$label showOverlayWhenUnlocked=$showOverlayWhenUnlocked style=$notifStyle overlayBg=$overlayBgColor overlayText=$overlayTextColor btnBg=$overlayBtnBgColor btnText=$overlayBtnTextColor")
+
         val km = getSystemService(KeyguardManager::class.java)
         val pm = getSystemService(PowerManager::class.java)
         val isLocked = (km?.isKeyguardLocked == true) || (km?.isDeviceLocked == true)
         val isInteractive = pm?.isInteractive == true
         val shouldFullScreen = isLocked || !isInteractive
+        Log.d("RNAlarm", "RingingService deviceState isLocked=$isLocked isInteractive=$isInteractive -> shouldFullScreen=$shouldFullScreen")
 
         val notif = buildForegroundNotification(shouldFullScreen)
         if (Build.VERSION.SDK_INT >= 29) {
@@ -54,19 +86,65 @@ class AlarmRingingService : Service() {
               .putExtra(AlarmReceiver.EXTRA_ID, alarmId)
               .putExtra(AlarmReceiver.EXTRA_LABEL, label)
               .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            // pass overlay colors to activity for theming
+            if (intent.hasExtra(EXTRA_STYLE_OVERLAY_BG)) {
+              fs.putExtra(AlarmActivity.EXTRA_OVERLAY_BG, intent.getIntExtra(EXTRA_STYLE_OVERLAY_BG, 0))
+            }
+            if (intent.hasExtra(EXTRA_STYLE_OVERLAY_TEXT)) {
+              fs.putExtra(AlarmActivity.EXTRA_OVERLAY_TEXT, intent.getIntExtra(EXTRA_STYLE_OVERLAY_TEXT, 0))
+            }
+            if (intent.hasExtra(EXTRA_STYLE_OVERLAY_BTN_BG)) {
+              fs.putExtra(AlarmActivity.EXTRA_OVERLAY_BTN_BG, intent.getIntExtra(EXTRA_STYLE_OVERLAY_BTN_BG, 0))
+            }
+            if (intent.hasExtra(EXTRA_STYLE_OVERLAY_BTN_TEXT)) {
+              fs.putExtra(AlarmActivity.EXTRA_OVERLAY_BTN_TEXT, intent.getIntExtra(EXTRA_STYLE_OVERLAY_BTN_TEXT, 0))
+            }
+            Log.d("RNAlarm", "RingingService startActivity AlarmActivity with bg=$overlayBgColor text=$overlayTextColor")
             startActivity(fs)
           } catch (_: Throwable) {}
         } else {
           // Device is unlocked and interactive: prefer overlay; avoid launching full-screen/app
           try {
-            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M || Settings.canDrawOverlays(this)) {
-              AlarmOverlayService.show(this, alarmId, label)
+            if (showOverlayWhenUnlocked && (Build.VERSION.SDK_INT < Build.VERSION_CODES.M || Settings.canDrawOverlays(this))) {
+              val styleMap = mutableMapOf<String, Any?>()
+              notifStyle.accentColor?.let { styleMap["accentColor"] = it }
+              styleMap["timerChannelId"] = notifStyle.timerChannelId
+              styleMap["alertChannelId"] = notifStyle.alertChannelId
+              styleMap["useChronometer"] = notifStyle.useChronometer
+              // Overlay colors if provided
+              if (intent.hasExtra(EXTRA_STYLE_OVERLAY_BG)) {
+                styleMap["overlayBackgroundColor"] = intent.getIntExtra(EXTRA_STYLE_OVERLAY_BG, 0)
+              }
+              if (intent.hasExtra(EXTRA_STYLE_OVERLAY_TEXT)) {
+                styleMap["overlayTextColor"] = intent.getIntExtra(EXTRA_STYLE_OVERLAY_TEXT, 0)
+              }
+              if (intent.hasExtra(EXTRA_STYLE_OVERLAY_BTN_BG)) {
+                styleMap["overlayButtonBackgroundColor"] = intent.getIntExtra(EXTRA_STYLE_OVERLAY_BTN_BG, 0)
+              }
+              if (intent.hasExtra(EXTRA_STYLE_OVERLAY_BTN_TEXT)) {
+                styleMap["overlayButtonTextColor"] = intent.getIntExtra(EXTRA_STYLE_OVERLAY_BTN_TEXT, 0)
+              }
+              Log.d("RNAlarm", "RingingService show overlay with styleMap bg=${styleMap["overlayBackgroundColor"]} text=${styleMap["overlayTextColor"]} btnBg=${styleMap["overlayButtonBackgroundColor"]} btnText=${styleMap["overlayButtonTextColor"]}")
+              AlarmOverlayService.show(this, alarmId, label, styleMap)
             } else {
               // Fallback to activity if no overlay permission
               val fs = Intent(this, AlarmActivity::class.java)
                 .putExtra(AlarmReceiver.EXTRA_ID, alarmId)
                 .putExtra(AlarmReceiver.EXTRA_LABEL, label)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+              if (intent.hasExtra(EXTRA_STYLE_OVERLAY_BG)) {
+                fs.putExtra(AlarmActivity.EXTRA_OVERLAY_BG, intent.getIntExtra(EXTRA_STYLE_OVERLAY_BG, 0))
+              }
+              if (intent.hasExtra(EXTRA_STYLE_OVERLAY_TEXT)) {
+                fs.putExtra(AlarmActivity.EXTRA_OVERLAY_TEXT, intent.getIntExtra(EXTRA_STYLE_OVERLAY_TEXT, 0))
+              }
+              if (intent.hasExtra(EXTRA_STYLE_OVERLAY_BTN_BG)) {
+                fs.putExtra(AlarmActivity.EXTRA_OVERLAY_BTN_BG, intent.getIntExtra(EXTRA_STYLE_OVERLAY_BTN_BG, 0))
+              }
+              if (intent.hasExtra(EXTRA_STYLE_OVERLAY_BTN_TEXT)) {
+                fs.putExtra(AlarmActivity.EXTRA_OVERLAY_BTN_TEXT, intent.getIntExtra(EXTRA_STYLE_OVERLAY_BTN_TEXT, 0))
+              }
+              Log.d("RNAlarm", "RingingService fallback AlarmActivity with bg=$overlayBgColor text=$overlayTextColor overlayPerm=${Settings.canDrawOverlays(this)} showOverlayWhenUnlocked=$showOverlayWhenUnlocked")
               startActivity(fs)
             }
           } catch (_: Throwable) {}
@@ -75,6 +153,7 @@ class AlarmRingingService : Service() {
       ACTION_STOP -> {
         stopTone()
         try { AlarmOverlayService.hide(this) } catch (_: Throwable) {}
+        Log.d("RNAlarm", "RingingService ACTION_STOP id=$alarmId")
         stopSelf()
       }
     }
@@ -82,7 +161,16 @@ class AlarmRingingService : Service() {
   }
 
   private fun buildForegroundNotification(fullScreen: Boolean): Notification {
-    return NotificationHelper.buildAlarmAlertNotification(this, alarmId, label, fullScreen)
+    Log.d("RNAlarm", "RingingService buildForegroundNotification fullScreen=$fullScreen overlayBg=$overlayBgColor overlayText=$overlayTextColor")
+    return NotificationHelper.buildAlarmAlertNotification(
+      this,
+      alarmId,
+      label,
+      fullScreen,
+      notifStyle,
+      overlayBgColor,
+      overlayTextColor
+    )
   }
 
   private fun startTone() {
@@ -100,6 +188,7 @@ class AlarmRingingService : Service() {
       start()
     }
     isRinging = true
+    Log.d("RNAlarm", "RingingService startTone id=$alarmId")
   }
 
   private fun stopTone() {
@@ -109,6 +198,7 @@ class AlarmRingingService : Service() {
     }
     mediaPlayer = null
     isRinging = false
+    Log.d("RNAlarm", "RingingService stopTone id=$alarmId")
   }
 
   override fun onDestroy() {
@@ -122,12 +212,35 @@ class AlarmRingingService : Service() {
     const val ACTION_STOP = "ai.asleep.reactnative.alarm.action.STOP_RING"
     const val EXTRA_ID = "extra_id"
     const val EXTRA_LABEL = "extra_label"
+    const val EXTRA_STYLE_TIMER_CHANNEL_ID = "style_timer_channel_id"
+    const val EXTRA_STYLE_ALERT_CHANNEL_ID = "style_alert_channel_id"
+    const val EXTRA_STYLE_SMALL_ICON = "style_small_icon"
+    const val EXTRA_STYLE_ACCENT_COLOR = "style_accent_color"
+    const val EXTRA_STYLE_USE_CHRONOMETER = "style_use_chronometer"
+    const val EXTRA_STYLE_SHOW_OVERLAY = "style_show_overlay"
+    const val EXTRA_STYLE_OVERLAY_BG = "style_overlay_bg"
+    const val EXTRA_STYLE_OVERLAY_TEXT = "style_overlay_text"
+    const val EXTRA_STYLE_OVERLAY_BTN_BG = "style_overlay_btn_bg"
+    const val EXTRA_STYLE_OVERLAY_BTN_TEXT = "style_overlay_btn_text"
 
-    fun start(context: Context, id: String, label: String?) {
+    fun start(context: Context, id: String, label: String?, style: Map<String, Any?>? = null) {
       val i = Intent(context, AlarmRingingService::class.java)
         .setAction(ACTION_RING)
         .putExtra(EXTRA_ID, id)
         .putExtra(EXTRA_LABEL, label)
+      if (style != null) {
+        Log.d("RNAlarm", "RingingService.start id=$id label=$label style=$style")
+        (style["timerChannelId"] as? String)?.let { i.putExtra(EXTRA_STYLE_TIMER_CHANNEL_ID, it) }
+        (style["alertChannelId"] as? String)?.let { i.putExtra(EXTRA_STYLE_ALERT_CHANNEL_ID, it) }
+        (style["smallIconName"] as? String)?.let { i.putExtra(EXTRA_STYLE_SMALL_ICON, it) }
+        (style["accentColor"] as? Int)?.let { i.putExtra(EXTRA_STYLE_ACCENT_COLOR, it) }
+        (style["useChronometer"] as? Boolean)?.let { i.putExtra(EXTRA_STYLE_USE_CHRONOMETER, it) }
+        (style["showOverlayWhenUnlocked"] as? Boolean)?.let { i.putExtra(EXTRA_STYLE_SHOW_OVERLAY, it) }
+        (style["overlayBackgroundColor"] as? Int)?.let { i.putExtra(EXTRA_STYLE_OVERLAY_BG, it) }
+        (style["overlayTextColor"] as? Int)?.let { i.putExtra(EXTRA_STYLE_OVERLAY_TEXT, it) }
+        (style["overlayButtonBackgroundColor"] as? Int)?.let { i.putExtra(EXTRA_STYLE_OVERLAY_BTN_BG, it) }
+        (style["overlayButtonTextColor"] as? Int)?.let { i.putExtra(EXTRA_STYLE_OVERLAY_BTN_TEXT, it) }
+      }
       if (Build.VERSION.SDK_INT >= 26) {
         context.startForegroundService(i)
       } else {

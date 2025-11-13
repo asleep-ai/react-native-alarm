@@ -18,6 +18,12 @@ class ForegroundTimerService : Service() {
   private var targetTimeMs: Long = 0L
   private var remainingWhenPaused: Long = 0L
   private var isPaused: Boolean = false
+  private var notifStyle: NotificationHelper.Style = NotificationHelper.Style()
+  private var overlayBgColor: Int? = null
+  private var overlayTextColor: Int? = null
+  private var overlayBtnBgColor: Int? = null
+  private var overlayBtnTextColor: Int? = null
+  private val logTag = "RNAlarm"
 
   override fun onBind(intent: Intent?): IBinder? = null
 
@@ -29,11 +35,33 @@ class ForegroundTimerService : Service() {
         label = intent.getStringExtra(EXTRA_LABEL)
         timerId = id
         isPaused = false
+        // Build style from extras if provided
+        notifStyle = NotificationHelper.Style(
+          timerChannelId = intent.getStringExtra(EXTRA_STYLE_TIMER_CHANNEL_ID) ?: NotificationHelper.CHANNEL_TIMERS_HIGH,
+          alertChannelId = intent.getStringExtra(EXTRA_STYLE_ALERT_CHANNEL_ID) ?: NotificationHelper.CHANNEL_ALERTS,
+          smallIconName = intent.getStringExtra(EXTRA_STYLE_SMALL_ICON),
+          accentColor = if (intent.hasExtra(EXTRA_STYLE_ACCENT_COLOR)) intent.getIntExtra(EXTRA_STYLE_ACCENT_COLOR, 0) else null,
+          useChronometer = intent.getBooleanExtra(EXTRA_STYLE_USE_CHRONOMETER, true)
+        )
+        if (intent.hasExtra(EXTRA_STYLE_OVERLAY_BG)) {
+          overlayBgColor = intent.getIntExtra(EXTRA_STYLE_OVERLAY_BG, 0)
+        }
+        if (intent.hasExtra(EXTRA_STYLE_OVERLAY_TEXT)) {
+          overlayTextColor = intent.getIntExtra(EXTRA_STYLE_OVERLAY_TEXT, 0)
+        }
+        if (intent.hasExtra(EXTRA_STYLE_OVERLAY_BTN_BG)) {
+          overlayBtnBgColor = intent.getIntExtra(EXTRA_STYLE_OVERLAY_BTN_BG, 0)
+        }
+        if (intent.hasExtra(EXTRA_STYLE_OVERLAY_BTN_TEXT)) {
+          overlayBtnTextColor = intent.getIntExtra(EXTRA_STYLE_OVERLAY_BTN_TEXT, 0)
+        }
+        android.util.Log.d(logTag, "FGTimer ACTION_START id=$id label=$label seconds=$seconds style=$notifStyle overlayBg=$overlayBgColor overlayText=$overlayTextColor btnBg=$overlayBtnBgColor btnText=$overlayBtnTextColor")
         targetTimeMs = System.currentTimeMillis() + seconds * 1000
         startForegroundInternal(buildNotification())
         tick()
       }
       ACTION_PAUSE -> {
+        android.util.Log.d(logTag, "FGTimer ACTION_PAUSE id=${timerId}")
         if (!isPaused) {
           val now = System.currentTimeMillis()
           remainingWhenPaused = ((targetTimeMs - now) / 1000).coerceAtLeast(0)
@@ -42,6 +70,7 @@ class ForegroundTimerService : Service() {
         }
       }
       ACTION_RESUME -> {
+        android.util.Log.d(logTag, "FGTimer ACTION_RESUME id=${timerId}")
         if (isPaused) {
           val now = System.currentTimeMillis()
           targetTimeMs = now + remainingWhenPaused * 1000
@@ -51,6 +80,7 @@ class ForegroundTimerService : Service() {
         }
       }
       ACTION_STOP -> {
+        android.util.Log.d(logTag, "FGTimer ACTION_STOP id=${timerId}")
         stopSelf()
       }
     }
@@ -59,8 +89,10 @@ class ForegroundTimerService : Service() {
 
   private fun startForegroundInternal(notification: Notification) {
     if (Build.VERSION.SDK_INT >= 29) {
+      android.util.Log.d(logTag, "FGTimer startForeground (Q+) id=$NOTIF_ID")
       startForeground(NOTIF_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SHORT_SERVICE)
     } else {
+      android.util.Log.d(logTag, "FGTimer startForeground id=$NOTIF_ID")
       startForeground(NOTIF_ID, notification)
     }
   }
@@ -73,12 +105,14 @@ class ForegroundTimerService : Service() {
       id,
       label,
       remainingSeconds,
-      isPaused
+      isPaused,
+      notifStyle
     )
   }
 
   private fun updateNotification() {
     val notif = buildNotification()
+    android.util.Log.d(logTag, "FGTimer updateNotification isPaused=$isPaused remain=${remainingSeconds()}")
     startForegroundInternal(notif)
   }
 
@@ -96,6 +130,7 @@ class ForegroundTimerService : Service() {
     if (isPaused) return
     val remain = remainingSeconds()
     if (remain <= 0) {
+      android.util.Log.d(logTag, "FGTimer tick finished id=$timerId -> start AlarmRingingService with overlayBg=$overlayBgColor overlayText=$overlayTextColor")
       finish()
       return
     }
@@ -105,7 +140,18 @@ class ForegroundTimerService : Service() {
 
   private fun finish() {
     val id = timerId ?: "unknown"
-    AlarmRingingService.start(this, id, label)
+    val styleMap = mapOf<String, Any?>(
+      "timerChannelId" to notifStyle.timerChannelId,
+      "alertChannelId" to notifStyle.alertChannelId,
+      "smallIconName" to notifStyle.smallIconName,
+      "accentColor" to notifStyle.accentColor,
+      "useChronometer" to notifStyle.useChronometer,
+      "overlayBackgroundColor" to overlayBgColor,
+      "overlayTextColor" to overlayTextColor,
+      "overlayButtonBackgroundColor" to overlayBtnBgColor,
+      "overlayButtonTextColor" to overlayBtnTextColor
+    )
+    AlarmRingingService.start(this, id, label, styleMap)
     stopForeground(true)
     stopSelf()
   }
@@ -126,13 +172,31 @@ class ForegroundTimerService : Service() {
     const val EXTRA_ID = "extra_id"
     const val EXTRA_SECONDS = "extra_seconds"
     const val EXTRA_LABEL = "extra_label"
+    const val EXTRA_STYLE_TIMER_CHANNEL_ID = "style_timer_channel_id"
+    const val EXTRA_STYLE_ALERT_CHANNEL_ID = "style_alert_channel_id"
+    const val EXTRA_STYLE_SMALL_ICON = "style_small_icon"
+    const val EXTRA_STYLE_ACCENT_COLOR = "style_accent_color"
+    const val EXTRA_STYLE_USE_CHRONOMETER = "style_use_chronometer"
+    const val EXTRA_STYLE_OVERLAY_BG = "style_overlay_bg"
+    const val EXTRA_STYLE_OVERLAY_TEXT = "style_overlay_text"
+    const val EXTRA_STYLE_OVERLAY_BTN_BG = "style_overlay_btn_bg"
+    const val EXTRA_STYLE_OVERLAY_BTN_TEXT = "style_overlay_btn_text"
 
-    fun start(context: Context, id: String, label: String?, seconds: Long) {
+    fun start(context: Context, id: String, label: String?, seconds: Long, style: Map<String, Any?>) {
       val intent = Intent(context, ForegroundTimerService::class.java)
         .setAction(ACTION_START)
         .putExtra(EXTRA_ID, id)
         .putExtra(EXTRA_LABEL, label)
         .putExtra(EXTRA_SECONDS, seconds)
+      (style["timerChannelId"] as? String)?.let { intent.putExtra(EXTRA_STYLE_TIMER_CHANNEL_ID, it) }
+      (style["alertChannelId"] as? String)?.let { intent.putExtra(EXTRA_STYLE_ALERT_CHANNEL_ID, it) }
+      (style["smallIconName"] as? String)?.let { intent.putExtra(EXTRA_STYLE_SMALL_ICON, it) }
+      (style["accentColor"] as? Int)?.let { intent.putExtra(EXTRA_STYLE_ACCENT_COLOR, it) }
+      (style["useChronometer"] as? Boolean)?.let { intent.putExtra(EXTRA_STYLE_USE_CHRONOMETER, it) }
+      (style["overlayBackgroundColor"] as? Int)?.let { intent.putExtra(EXTRA_STYLE_OVERLAY_BG, it) }
+      (style["overlayTextColor"] as? Int)?.let { intent.putExtra(EXTRA_STYLE_OVERLAY_TEXT, it) }
+      (style["overlayButtonBackgroundColor"] as? Int)?.let { intent.putExtra(EXTRA_STYLE_OVERLAY_BTN_BG, it) }
+      (style["overlayButtonTextColor"] as? Int)?.let { intent.putExtra(EXTRA_STYLE_OVERLAY_BTN_TEXT, it) }
       if (Build.VERSION.SDK_INT >= 26) {
         context.startForegroundService(intent)
       } else {

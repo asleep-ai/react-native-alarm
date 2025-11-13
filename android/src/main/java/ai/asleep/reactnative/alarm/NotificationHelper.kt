@@ -14,13 +14,22 @@ import androidx.core.app.NotificationManagerCompat
 import android.app.TaskStackBuilder
 import java.text.DateFormat
 import java.util.Date
+import android.util.Log
 
 internal object NotificationHelper {
   const val CHANNEL_TIMERS = "react_native_alarm_timers" // legacy low-importance
   const val CHANNEL_TIMERS_HIGH = "react_native_alarm_timers_high"
   const val CHANNEL_ALERTS = "react_native_alarm_alerts"
 
-  fun ensureChannels(context: Context) {
+  data class Style(
+    val timerChannelId: String = CHANNEL_TIMERS_HIGH,
+    val alertChannelId: String = CHANNEL_ALERTS,
+    val smallIconName: String? = null,
+    val accentColor: Int? = null,
+    val useChronometer: Boolean = true
+  )
+
+  fun ensureChannels(context: Context, style: Style) {
     if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) return
     val nm = context.getSystemService(NotificationManager::class.java)
 
@@ -37,9 +46,9 @@ internal object NotificationHelper {
     }
 
     // Timers high-importance (for keyguard visibility)
-    if (nm.getNotificationChannel(CHANNEL_TIMERS_HIGH) == null) {
+    if (nm.getNotificationChannel(style.timerChannelId) == null) {
       val ch = NotificationChannel(
-        CHANNEL_TIMERS_HIGH,
+        style.timerChannelId,
         "Alarms & timers (keyguard visible)",
         NotificationManager.IMPORTANCE_HIGH
       )
@@ -49,9 +58,9 @@ internal object NotificationHelper {
     }
 
     // Alerts channel (fires at the end)
-    if (nm.getNotificationChannel(CHANNEL_ALERTS) == null) {
+    if (nm.getNotificationChannel(style.alertChannelId) == null) {
       val ch = NotificationChannel(
-        CHANNEL_ALERTS,
+        style.alertChannelId,
         "Alarm alerts",
         NotificationManager.IMPORTANCE_HIGH
       )
@@ -73,9 +82,10 @@ internal object NotificationHelper {
     id: String,
     label: String?,
     remainingSeconds: Long,
-    isPaused: Boolean
+    isPaused: Boolean,
+    style: Style
   ): Notification {
-    ensureChannels(context)
+    ensureChannels(context, style)
     val title = if (!label.isNullOrBlank()) label else "Timer"
     val content = if (isPaused) {
       "Paused: ${formatDuration(remainingSeconds)} remaining"
@@ -83,6 +93,7 @@ internal object NotificationHelper {
       "Time remaining: ${formatDuration(remainingSeconds)}"
     }
     val finishAtMs = System.currentTimeMillis() + remainingSeconds * 1000
+    val smallIcon = resolveSmallIcon(context, style.smallIconName)
 
     val pauseIntent = Intent(context, ForegroundTimerService::class.java)
       .setAction(ForegroundTimerService.ACTION_PAUSE)
@@ -113,8 +124,8 @@ internal object NotificationHelper {
       PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
     )
 
-    val builder = NotificationCompat.Builder(context, CHANNEL_TIMERS_HIGH)
-      .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
+    val builder = NotificationCompat.Builder(context, style.timerChannelId)
+      .setSmallIcon(smallIcon)
       .setContentTitle(title)
       .setContentText(content)
       .setOngoing(true)
@@ -124,9 +135,14 @@ internal object NotificationHelper {
       .setPriority(NotificationCompat.PRIORITY_HIGH)
       .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
       // Live countdown in the notification (system-updated chronometer)
-      .setUsesChronometer(!isPaused)
+      .setUsesChronometer(style.useChronometer && !isPaused)
       .setChronometerCountDown(true)
       .setWhen(finishAtMs)
+
+    style.accentColor?.let {
+      builder.setColor(it)
+      builder.setColorized(true)
+    }
 
     if (isPaused) {
       builder.addAction(0, "Resume", resumePi)
@@ -137,15 +153,28 @@ internal object NotificationHelper {
     return builder.build()
   }
 
-  fun buildAlarmAlertNotification(context: Context, id: String, label: String?, fullScreen: Boolean): Notification {
-    ensureChannels(context)
+  fun buildAlarmAlertNotification(
+    context: Context,
+    id: String,
+    label: String?,
+    fullScreen: Boolean,
+    style: Style,
+    overlayBgColor: Int? = null,
+    overlayTextColor: Int? = null
+  ): Notification {
+    ensureChannels(context, style)
     val title = if (!label.isNullOrBlank()) label else "Alarm"
+    val smallIcon = resolveSmallIcon(context, style.smallIconName)
 
     // Full screen intent to bring AlarmActivity to foreground
     val fsIntent = Intent(context, AlarmActivity::class.java).apply {
       putExtra(AlarmReceiver.EXTRA_ID, id)
       putExtra(AlarmReceiver.EXTRA_LABEL, label)
+      // Pass overlay theming to activity if available
+      overlayBgColor?.let { putExtra(AlarmActivity.EXTRA_OVERLAY_BG, it) }
+      overlayTextColor?.let { putExtra(AlarmActivity.EXTRA_OVERLAY_TEXT, it) }
     }
+    Log.d("RNAlarm", "NotificationHelper buildAlarmAlertNotification id=$id fullScreen=$fullScreen bg=$overlayBgColor text=$overlayTextColor")
     val stack = TaskStackBuilder.create(context).apply {
       addNextIntentWithParentStack(fsIntent)
     }
@@ -165,8 +194,8 @@ internal object NotificationHelper {
       PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
     )
 
-    val builder = NotificationCompat.Builder(context, CHANNEL_ALERTS)
-      .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
+    val builder = NotificationCompat.Builder(context, style.alertChannelId)
+      .setSmallIcon(smallIcon)
       .setContentTitle(title)
       .setContentText("Alarm time reached")
       .setPriority(NotificationCompat.PRIORITY_MAX)
@@ -181,19 +210,25 @@ internal object NotificationHelper {
       builder.setFullScreenIntent(fsPi, true)
     }
 
+    style.accentColor?.let {
+      builder.setColor(it)
+      builder.setColorized(true)
+    }
+
     return builder.build()
   }
 
   fun showAlarmAlert(context: Context, id: String, label: String?) {
-    val notif = buildAlarmAlertNotification(context, id, label, true)
+    val notif = buildAlarmAlertNotification(context, id, label, true, Style())
     NotificationManagerCompat.from(context).notify(id.hashCode(), notif)
   }
 
-  fun showCountdownInfoNotification(context: Context, id: String, label: String?, targetAtMs: Long) {
-    ensureChannels(context)
+  fun showCountdownInfoNotification(context: Context, id: String, label: String?, targetAtMs: Long, style: Style) {
+    ensureChannels(context, style)
     val title = if (!label.isNullOrBlank()) label else "Alarm"
     val timeText = DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(targetAtMs))
     val content = "Rings at $timeText"
+    val smallIcon = resolveSmallIcon(context, style.smallIconName)
 
     // Tapping opens AlarmActivity pre-armed to Stop if already ringing
     val fsIntent = Intent(context, AlarmActivity::class.java).apply {
@@ -208,8 +243,8 @@ internal object NotificationHelper {
       PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
     )
 
-    val builder = NotificationCompat.Builder(context, CHANNEL_TIMERS_HIGH)
-      .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
+    val builder = NotificationCompat.Builder(context, style.timerChannelId)
+      .setSmallIcon(smallIcon)
       .setContentTitle(title)
       .setContentText(content)
       .setOngoing(true)
@@ -218,10 +253,15 @@ internal object NotificationHelper {
       .setCategory(NotificationCompat.CATEGORY_ALARM)
       .setPriority(NotificationCompat.PRIORITY_HIGH)
       // System chronometer counts down to the alarm time
-      .setUsesChronometer(true)
+      .setUsesChronometer(style.useChronometer)
       .setChronometerCountDown(true)
       .setWhen(targetAtMs)
       .setContentIntent(pi)
+
+    style.accentColor?.let {
+      builder.setColor(it)
+      builder.setColorized(true)
+    }
 
     NotificationManagerCompat.from(context).notify((id + ":info").hashCode(), builder.build())
   }
@@ -232,6 +272,12 @@ internal object NotificationHelper {
     val m = (s % 3600) / 60
     val sec = s % 60
     return if (h > 0) "%d:%02d:%02d".format(h, m, sec) else "%02d:%02d".format(m, sec)
+  }
+
+  private fun resolveSmallIcon(context: Context, name: String?): Int {
+    if (name.isNullOrBlank()) return android.R.drawable.ic_lock_idle_alarm
+    val resId = context.resources.getIdentifier(name, "drawable", context.packageName)
+    return if (resId != 0) resId else android.R.drawable.ic_lock_idle_alarm
   }
 }
 

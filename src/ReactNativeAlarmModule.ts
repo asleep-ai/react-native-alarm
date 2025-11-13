@@ -4,6 +4,7 @@ import type {
   Alarm,
   ScheduleAlarmOptions,
 } from "./ReactNativeAlarm.types";
+import type { ReactNativeAlarmConfig } from "./ReactNativeAlarm.types";
 
 declare class ReactNativeAlarmModule extends NativeModule<ReactNativeAlarmEvents> {
   isAlarmKitAvailable(): boolean;
@@ -14,6 +15,13 @@ declare class ReactNativeAlarmModule extends NativeModule<ReactNativeAlarmEvents
   openExactAlarmSettings(): Promise<boolean>;
   openOverlayPermissionSettings(): Promise<boolean>;
   openBatteryOptimizationSettings(): Promise<boolean>;
+  setConfig(config: ReactNativeAlarmConfig): Promise<void>;
+  getAndroidPermissionStatus(): Promise<{
+    notifications: boolean;
+    exactAlarmAllowed: boolean;
+    overlayAllowed: boolean;
+    ignoringBatteryOptimizations: boolean;
+  }>;
   scheduleAlarm(options: ScheduleAlarmOptions): Promise<Alarm>;
   cancelAlarm(id: string): Promise<void>;
   cancelAll(): Promise<void>;

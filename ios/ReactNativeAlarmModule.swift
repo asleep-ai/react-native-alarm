@@ -11,6 +11,11 @@ public class ReactNativeAlarmModule: Module {
     f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
     return f
   }()
+  // Global style config (iOS)
+  private var iosTintHex: String? = nil
+  private var iosAlertStopText: String? = nil
+  private var iosCountdownPauseText: String? = nil
+  private var iosPausedResumeText: String? = nil
   // iOS 26+ only. AlarmKit usage only; no UserNotifications fallback.
   #if canImport(AlarmKit)
   @available(iOS 26.0, *)
@@ -69,6 +74,15 @@ public class ReactNativeAlarmModule: Module {
       return false
     }
 
+    AsyncFunction("setConfig") { (config: [String: Any]) in
+      if let ios = config["ios"] as? [String: Any] {
+        self.iosTintHex = ios["tintColorHex"] as? String
+        self.iosAlertStopText = ios["alertStopText"] as? String
+        self.iosCountdownPauseText = ios["countdownPauseText"] as? String
+        self.iosPausedResumeText = ios["pausedResumeText"] as? String
+      }
+    }
+
     AsyncFunction("requestPermission") { () async -> Bool in
       #if canImport(AlarmKit)
       if #available(iOS 26.0, *) {
@@ -87,6 +101,11 @@ public class ReactNativeAlarmModule: Module {
       let label = options["label"] as? String ?? "Alarm"
       let dateISO = options["dateISO"] as? String ?? ""
       let countdownSeconds = options["countdownSeconds"] as? Double
+      let iosOpts = options["ios"] as? [String: Any]
+      let stopText = (iosOpts?["alertStopText"] as? String) ?? self.iosAlertStopText ?? "Done"
+      let pauseText = (iosOpts?["countdownPauseText"] as? String) ?? self.iosCountdownPauseText ?? "Pause"
+      let resumeText = (iosOpts?["pausedResumeText"] as? String) ?? self.iosPausedResumeText ?? "Start"
+      let tintHex = (iosOpts?["tintColorHex"] as? String) ?? self.iosTintHex
       var targetDate: Date? = nil
       if let d = isoFormatter.date(from: dateISO), d.timeIntervalSinceNow > 0 {
         targetDate = d
@@ -96,7 +115,7 @@ public class ReactNativeAlarmModule: Module {
         // Title for presentations
         let title: LocalizedStringResource = label.isEmpty ? LocalizedStringResource("Alarm") : LocalizedStringResource(stringLiteral: label)
         // Basic alert presentation with default stop button
-        let stopBtn = AlarmButton(text: "Done", textColor: .white, systemImageName: "stop.circle")
+        let stopBtn = AlarmButton(text: LocalizedStringResource(stringLiteral: stopText), textColor: .white, systemImageName: "stop.circle")
         let alert = AlarmPresentation.Alert(
           title: title,
           stopButton: stopBtn,
@@ -104,12 +123,12 @@ public class ReactNativeAlarmModule: Module {
           secondaryButtonBehavior: nil
         )
         // Provide default countdown and paused presentations so a Live Activity can appear
-        let pauseBtn = AlarmButton(text: "Pause", textColor: .black, systemImageName: "pause.fill")
+        let pauseBtn = AlarmButton(text: LocalizedStringResource(stringLiteral: pauseText), textColor: .black, systemImageName: "pause.fill")
         let countdownUI = AlarmPresentation.Countdown(
           title: title,
           pauseButton: pauseBtn
         )
-        let resumeBtn = AlarmButton(text: "Start", textColor: .black, systemImageName: "play.fill")
+        let resumeBtn = AlarmButton(text: LocalizedStringResource(stringLiteral: resumeText), textColor: .black, systemImageName: "play.fill")
         let pausedUI = AlarmPresentation.Paused(
           title: LocalizedStringResource("Paused"),
           resumeButton: resumeBtn
@@ -119,7 +138,7 @@ public class ReactNativeAlarmModule: Module {
         let attributes = AlarmAttributes<RNMetadata>(
           presentation: presentation,
           metadata: RNMetadata(),
-          tintColor: Color.blue
+          tintColor: (tintHex != nil ? ReactNativeAlarmModule.colorFromHex(tintHex!) : Color.blue)
         )
         // Optional one-time schedule using fixed date if provided
         var schedule: Alarm.Schedule? = nil
@@ -224,5 +243,20 @@ public class ReactNativeAlarmModule: Module {
       #endif
       return loadScheduled()
     }
+  }
+
+  static func colorFromHex(_ hex: String) -> Color {
+    var str = hex.trimmingCharacters(in: .whitespacesAndNewlines).uppercased()
+    if str.hasPrefix("#") { str.removeFirst() }
+    var rgb: UInt64 = 0
+    Scanner(string: str).scanHexInt64(&rgb)
+    let r, g, b: Double
+    if str.count == 6 {
+      r = Double((rgb & 0xFF0000) >> 16) / 255.0
+      g = Double((rgb & 0x00FF00) >> 8) / 255.0
+      b = Double(rgb & 0x0000FF) / 255.0
+      return Color(red: r, green: g, blue: b)
+    }
+    return Color.blue
   }
 }
