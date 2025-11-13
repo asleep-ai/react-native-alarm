@@ -4,8 +4,20 @@
   <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SHORT_SERVICE" />
   <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
   <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
+  <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
+  <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+  <uses-permission android:name="android.permission.VIBRATE" />
+  <uses-permission android:name="android.permission.WAKE_LOCK" />
 
   <application>
+    <activity
+      android:name=".AlarmActivity"
+      android:exported="false"
+      android:showOnLockScreen="true"
+      android:turnScreenOn="true"
+      android:excludeFromRecents="true"
+      android:launchMode="singleTop" />
+
     <service
       android:name=".ForegroundTimerService"
       android:exported="false"
@@ -14,5 +26,14 @@
     <receiver
       android:name=".AlarmReceiver"
       android:exported="false" />
+
+    <receiver
+      android:name=".BootReceiver"
+      android:exported="false">
+      <intent-filter>
+        <action android:name="android.intent.action.BOOT_COMPLETED" />
+        <action android:name="android.intent.action.LOCKED_BOOT_COMPLETED" />
+      </intent-filter>
+    </receiver>
   </application>
 </manifest>

@@ -11,6 +11,7 @@ import android.media.RingtoneManager
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
+import android.app.TaskStackBuilder
 
 internal object NotificationHelper {
   const val CHANNEL_TIMERS = "react_native_alarm_timers"
@@ -115,6 +116,19 @@ internal object NotificationHelper {
     ensureChannels(context)
     val title = if (!label.isNullOrBlank()) label else "Alarm"
 
+    // Full screen intent to bring AlarmActivity to foreground
+    val fsIntent = Intent(context, AlarmActivity::class.java).apply {
+      putExtra(AlarmReceiver.EXTRA_ID, id)
+      putExtra(AlarmReceiver.EXTRA_LABEL, label)
+    }
+    val stack = TaskStackBuilder.create(context).apply {
+      addNextIntentWithParentStack(fsIntent)
+    }
+    val fsPi = stack.getPendingIntent(
+      (id + ":fs").hashCode(),
+      PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+    )
+
     // App may not have an activity we can target; show dismiss-only notification.
     val dismissIntent = Intent(context, AlarmReceiver::class.java)
       .setAction(AlarmReceiver.ACTION_DISMISS)
@@ -135,6 +149,8 @@ internal object NotificationHelper {
       .setDefaults(NotificationCompat.DEFAULT_ALL)
       .setAutoCancel(true)
       .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+      .setContentIntent(fsPi)
+      .setFullScreenIntent(fsPi, true)
       .addAction(0, "Dismiss", dismissPi)
 
     NotificationManagerCompat.from(context).notify(id.hashCode(), builder.build())

@@ -11,6 +11,14 @@ class AlarmReceiver : BroadcastReceiver() {
     when (intent.action) {
       ACTION_FIRE -> {
         NotificationHelper.showAlarmAlert(context, id, label)
+        // Fallback: explicitly start AlarmActivity
+        try {
+          val fs = Intent(context, AlarmActivity::class.java)
+            .putExtra(EXTRA_ID, id)
+            .putExtra(EXTRA_LABEL, label)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+          context.startActivity(fs)
+        } catch (_: Throwable) {}
         // Storage mark enabled=false
         val storage = AlarmStorage(context)
         val items = storage.loadAll().map {
