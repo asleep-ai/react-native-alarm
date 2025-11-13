@@ -16,15 +16,28 @@ import {
   View,
   Alert,
 } from "react-native";
+import { Platform } from "react-native";
+import {
+  canScheduleExactAlarms,
+  openExactAlarmSettings,
+} from "@asleep-ai/react-native-alarm";
 
 export default function App() {
   const [available, setAvailable] = useState<boolean>(false);
   const [alarms, setAlarms] = useState<Alarm[]>([]);
   const [lastScheduled, setLastScheduled] = useState<Alarm | null>(null);
   const [nowISO, setNowISO] = useState<string>(new Date().toISOString());
+  const [exactAllowed, setExactAllowed] = useState<boolean>(false);
 
   useEffect(() => {
     setAvailable(isAvailable());
+    if (Platform.OS === "android") {
+      try {
+        setExactAllowed(canScheduleExactAlarms());
+      } catch {
+        setExactAllowed(false);
+      }
+    }
   }, []);
 
   useEffect(() => {
@@ -128,6 +141,39 @@ export default function App() {
         <Group name="Actions">
           <View style={{ gap: 12 }}>
             <Button title="Request Permission" onPress={onRequestPermission} />
+            {Platform.OS === "android" ? (
+              <>
+                <Text>Exact alarms allowed: {String(exactAllowed)}</Text>
+                <Button
+                  title="Open Exact Alarm Settings"
+                  onPress={async () => {
+                    try {
+                      const ok = await openExactAlarmSettings();
+                      if (!ok) {
+                        Alert.alert(
+                          "Info",
+                          "Unable to open settings. You can allow exact alarms in system settings."
+                        );
+                      }
+                    } catch {
+                      Alert.alert(
+                        "Error",
+                        "Failed to open exact alarm settings."
+                      );
+                    } finally {
+                      // Refresh flag after a short delay
+                      setTimeout(() => {
+                        try {
+                          setExactAllowed(canScheduleExactAlarms());
+                        } catch {
+                          setExactAllowed(false);
+                        }
+                      }, 1000);
+                    }
+                  }}
+                />
+              </>
+            ) : null}
             <Button
               title="Schedule Alarm in 5s"
               onPress={() => onScheduleIn(5)}

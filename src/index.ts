@@ -6,8 +6,16 @@ export function isAvailable(): boolean {
   return ReactNativeAlarmModule.isAlarmKitAvailable();
 }
 
+export function canScheduleExactAlarms(): boolean {
+  return ReactNativeAlarmModule.canScheduleExactAlarms();
+}
+
 export async function requestPermission(): Promise<boolean> {
   return ReactNativeAlarmModule.requestPermission();
+}
+
+export async function openExactAlarmSettings(): Promise<boolean> {
+  return ReactNativeAlarmModule.openExactAlarmSettings();
 }
 
 export async function scheduleAlarm(
