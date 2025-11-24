@@ -1,6 +1,6 @@
 {
   "name": "@asleep-ai/react-native-alarm",
-  "version": "0.1.11",
+  "version": "0.1.12",
   "description": "Asleep React Native Alarm using iOS AlarmKit (iOS 26+)",
   "main": "build/index.js",
   "types": "build/index.d.ts",
