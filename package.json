@@ -4,46 +4,40 @@
   "description": "Asleep React Native Alarm using iOS AlarmKit (iOS 26+)",
   "main": "build/index.js",
   "types": "build/index.d.ts",
-  "source": "src/index.ts",
   "scripts": {
-    "build": "tsc -p tsconfig.json",
-    "clean": "rimraf build",
-    "prepare": "npm run build",
-    "typecheck": "tsc --noEmit",
-    "prepublishOnly": "npm run clean && npm run build",
-    "version:patch": "npm version patch",
-    "version:minor": "npm version minor",
-    "version:major": "npm version major"
+    "build": "expo-module build",
+    "clean": "expo-module clean",
+    "lint": "expo-module lint",
+    "test": "expo-module test",
+    "prepare": "expo-module prepare",
+    "prepublishOnly": "expo-module prepublishOnly",
+    "expo-module": "expo-module",
+    "open:ios": "xed example/ios",
+    "open:android": "open -a \"Android Studio\" example/android"
   },
-  "publishConfig": {
-    "access": "public",
-    "registry": "https://registry.npmjs.org/"
+  "keywords": [
+    "react-native",
+    "expo",
+    "@asleep-ai/react-native-alarm",
+    "ReactNativeAlarm"
+  ],
+  "repository": "https://github.com/asleep-ai/react-native-alarm",
+  "bugs": {
+    "url": "https://github.com/asleep-ai/react-native-alarm/issues"
   },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/asleep-ai/react-native-alarm.git"
-  },
-  "author": "Qube <qube@asleep.ai> (https://github.com/Sun-Woo-Kim)",
+  "author": "Qube <qube@asleep.ai> (Sun-Woo-Kim)",
   "license": "MIT",
   "homepage": "https://github.com/asleep-ai/react-native-alarm#readme",
-  "files": [
-    "build",
-    "ios",
-    "android",
-    "expo-module.config.json",
-    "README.md"
-  ],
-  "peerDependencies": {
-    "react": ">=18",
-    "react-native": ">=0.74",
-    "expo": ">=51"
-  },
-  "dependencies": {
-    "expo-modules-core": "^2.0.0"
-  },
+  "dependencies": {},
   "devDependencies": {
-    "typescript": "^5.6.3",
-    "@types/react-native": "^0.73.0",
-    "rimraf": "^6.0.1"
+    "@types/react": "~19.1.0",
+    "expo-module-scripts": "^5.0.7",
+    "expo": "^54.0.24",
+    "react-native": "0.81.5"
+  },
+  "peerDependencies": {
+    "expo": "*",
+    "react": "*",
+    "react-native": "*"
   }
 }

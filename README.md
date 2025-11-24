@@ -29,7 +29,32 @@ cd ios
 npx pod-install
 ```
 
-### Step 3: Configure Android (if needed)
+### Step 3: Configure iOS Info.plist
+
+Add the `NSAlarmKitUsageDescription` key to your app's `Info.plist` file. This is required for AlarmKit to request authorization and display the permission dialog.
+
+**For Expo apps**, add to `app.json`:
+```json
+{
+  "expo": {
+    "ios": {
+      "infoPlist": {
+        "NSAlarmKitUsageDescription": "We'll schedule alerts for alarms you create within our app."
+      }
+    }
+  }
+}
+```
+
+**For bare React Native apps**, add to `ios/YourApp/Info.plist`:
+```xml
+<key>NSAlarmKitUsageDescription</key>
+<string>We'll schedule alerts for alarms you create within our app.</string>
+```
+
+**Important**: If `NSAlarmKitUsageDescription` is missing or empty, AlarmKit cannot request authorization and alarms won't be scheduled.
+
+### Step 4: Configure Android (if needed)
 
 The library automatically configures Android permissions. Ensure your `AndroidManifest.xml` includes notification permissions (usually handled by Expo).
 

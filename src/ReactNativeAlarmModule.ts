@@ -11,7 +11,9 @@ declare class ReactNativeAlarmModule extends NativeModule<ReactNativeAlarmEvents
   canScheduleExactAlarms(): boolean;
   hasOverlayPermission(): boolean;
   isIgnoringBatteryOptimizations(): boolean;
-  requestPermission(): Promise<boolean>;
+  requestPermission(): Promise<{ granted: boolean; status: string }>;
+  getAuthorizationStatus(): Promise<string>;
+  openSettings(): Promise<void>;
   openExactAlarmSettings(): Promise<boolean>;
   openOverlayPermissionSettings(): Promise<boolean>;
   openBatteryOptimizationSettings(): Promise<boolean>;

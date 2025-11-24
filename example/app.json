@@ -14,7 +14,10 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "ai.asleep.reactnative.alarm.example"
+      "bundleIdentifier": "ai.asleep.reactnative.alarm.example",
+      "infoPlist": {
+        "NSAlarmKitUsageDescription": "We'll schedule alerts for alarms you create within our app."
+      }
     },
     "android": {
       "adaptiveIcon": {

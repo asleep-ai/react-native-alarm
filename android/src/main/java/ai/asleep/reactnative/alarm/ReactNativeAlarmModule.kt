@@ -97,9 +97,9 @@ class ReactNativeAlarmModule : Module() {
 
     AsyncFunction("requestPermission") {
       if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
-        return@AsyncFunction false
+        return@AsyncFunction mapOf("granted" to false, "status" to "notAvailable")
       }
-      val ctx = appContext.reactContext ?: return@AsyncFunction false
+      val ctx = appContext.reactContext ?: return@AsyncFunction mapOf("granted" to false, "status" to "unknown")
       val enabled = NotificationManagerCompat.from(ctx).areNotificationsEnabled()
       // Best-effort prompt: if disabled and we have an activity, request runtime permission.
       if (!enabled) {
@@ -111,10 +111,17 @@ class ReactNativeAlarmModule : Module() {
             5011
           )
           // Return current state; caller can call again if user interacts.
-          return@AsyncFunction NotificationManagerCompat.from(ctx).areNotificationsEnabled()
+          val finalEnabled = NotificationManagerCompat.from(ctx).areNotificationsEnabled()
+          return@AsyncFunction mapOf(
+            "granted" to finalEnabled,
+            "status" to if (finalEnabled) "authorized" else "denied"
+          )
         }
       }
-      enabled
+      mapOf(
+        "granted" to enabled,
+        "status" to if (enabled) "authorized" else "denied"
+      )
     }
 
     AsyncFunction("openOverlayPermissionSettings") {

@@ -19,8 +19,16 @@ export function isIgnoringBatteryOptimizations(): boolean {
   return ReactNativeAlarmModule.isIgnoringBatteryOptimizations();
 }
 
-export async function requestPermission(): Promise<boolean> {
+export async function requestPermission(): Promise<{ granted: boolean; status: string }> {
   return ReactNativeAlarmModule.requestPermission();
+}
+
+export async function getAuthorizationStatus(): Promise<string> {
+  return ReactNativeAlarmModule.getAuthorizationStatus();
+}
+
+export async function openSettings(): Promise<void> {
+  return ReactNativeAlarmModule.openSettings();
 }
 
 export async function openExactAlarmSettings(): Promise<boolean> {

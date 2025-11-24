@@ -1,7 +1,6 @@
 {
-  "name": "@asleep-ai/react-native-alarm",
-  "platforms": ["ios", "android"],
-  "ios": {
+  "platforms": ["apple", "android"],
+  "apple": {
     "modules": ["ReactNativeAlarmModule"]
   },
   "android": {

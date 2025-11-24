@@ -10,24 +10,20 @@ Pod::Spec.new do |s|
   s.license        = package['license']
   s.author         = package['author']
   s.homepage       = package['homepage']
-  s.platforms      = { :ios => '15.1' }
-  s.swift_version  = '5.9'
-  s.source         = {
-    git: 'https://github.com/asleep-ai/react-native-alarm',
-    tag: s.version.to_s
+  s.platforms      = {
+    :ios => '15.1',
+    :tvos => '15.1'
   }
+  s.swift_version  = '5.9'
+  s.source         = { git: 'https://github.com/asleep-ai/react-native-alarm' }
   s.static_framework = true
 
   s.dependency 'ExpoModulesCore'
-  s.frameworks = 'AlarmKit'
 
   # Swift/Objective-C compatibility
   s.pod_target_xcconfig = {
     'DEFINES_MODULE' => 'YES',
   }
 
-  s.source_files = "ios/**/*.{h,m,mm,swift,hpp,cpp}"
-  s.public_header_files = "ios/React/*.h"
-  s.header_mappings_dir = 'ios'
-  s.header_dir = 'React'
+  s.source_files = "**/*.{h,m,mm,swift,hpp,cpp}"
 end

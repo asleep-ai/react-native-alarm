@@ -2,6 +2,8 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   isAvailable,
   requestPermission,
+  getAuthorizationStatus,
+  openSettings,
   scheduleAlarm,
   getAlarms,
   cancelAlarm,
@@ -85,8 +87,29 @@ export default function App() {
 
   const onRequestPermission = useCallback(async () => {
     try {
-      const granted = await requestPermission();
-      Alert.alert("Permission", granted ? "granted" : "denied");
+      const result = await requestPermission();
+      if (result.granted) {
+        Alert.alert("Permission", "granted");
+      } else {
+        // Check status to determine if user needs to go to settings
+        if (result.status === "denied") {
+          Alert.alert(
+            "Permission Denied",
+            "Alarm permission has been denied. Please enable it in Settings.",
+            [
+              { text: "Cancel", style: "cancel" },
+              {
+                text: "Open Settings",
+                onPress: async () => {
+                  await openSettings();
+                },
+              },
+            ]
+          );
+        } else {
+          Alert.alert("Permission", "denied");
+        }
+      }
     } catch (e: any) {
       Alert.alert("Error", String(e?.message ?? e));
     }

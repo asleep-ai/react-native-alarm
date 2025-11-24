@@ -1,5 +1,6 @@
 import ExpoModulesCore
 import SwiftUI
+import UIKit
 #if canImport(AlarmKit)
 import AlarmKit
 #endif
@@ -83,18 +84,63 @@ public class ReactNativeAlarmModule: Module {
       }
     }
 
-    AsyncFunction("requestPermission") { () async -> Bool in
+    AsyncFunction("requestPermission") { () async -> [String: Any] in
       #if canImport(AlarmKit)
       if #available(iOS 26.0, *) {
         do {
+          // Request authorization - this will return current status if already determined
           let state = try await AlarmManager.shared.requestAuthorization()
-          return state == .authorized
+          let isAuthorized = state == .authorized
+          var statusString = "unknown"
+          switch state {
+          case .notDetermined:
+            statusString = "notDetermined"
+          case .denied:
+            statusString = "denied"
+          case .authorized:
+            statusString = "authorized"
+          @unknown default:
+            statusString = "unknown"
+          }
+          return ["granted": isAuthorized, "status": statusString]
         } catch {
-          return false
+          return ["granted": false, "status": "unknown"]
         }
       }
       #endif
-      return false
+      return ["granted": false, "status": "notAvailable"]
+    }
+    
+    AsyncFunction("getAuthorizationStatus") { () async -> String in
+      #if canImport(AlarmKit)
+      if #available(iOS 26.0, *) {
+        do {
+          // Note: requestAuthorization() will show dialog only if status is .notDetermined
+          // If status is already determined (.denied or .authorized), it returns immediately
+          // without showing dialog. This is the only way to check status in AlarmKit.
+          let state = try await AlarmManager.shared.requestAuthorization()
+          switch state {
+          case .notDetermined:
+            return "notDetermined"
+          case .denied:
+            return "denied"
+          case .authorized:
+            return "authorized"
+          @unknown default:
+            return "unknown"
+          }
+        } catch {
+          return "unknown"
+        }
+      }
+      #endif
+      return "notAvailable"
+    }
+    
+    AsyncFunction("openSettings") {
+      if let url = URL(string: UIApplication.openSettingsURLString) {
+        await UIApplication.shared.open(url)
+      }
     }
 
     AsyncFunction("scheduleAlarm") { (options: [String: Any]) -> [String: Any] in
