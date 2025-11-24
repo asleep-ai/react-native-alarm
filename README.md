@@ -41,6 +41,14 @@ Local development (library)
 - Build TypeScript: `npm run build`
 - Example app: `cd example && npx expo start`
 
+Publishing
+- Manual publish: `npm publish --access public`
+- Version bump: `npm run version:patch|minor|major`
+- Automated: Push a tag `v*.*.*` or use GitHub Actions workflow_dispatch
+
+Branch Strategy
+- See [BRANCH_STRATEGY.md](.github/BRANCH_STRATEGY.md) for branch workflow and release process
+
 Links
 - Expo Modules API: Get started — https://docs.expo.dev/modules/get-started/
 - Expo Modules API: Native module tutorial — https://docs.expo.dev/modules/native-module-tutorial/
