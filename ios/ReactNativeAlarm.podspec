@@ -28,5 +28,31 @@ Pod::Spec.new do |s|
     'DEFINES_MODULE' => 'YES',
   }
 
+  # Fix for React-Core-umbrella.h not found in React Native 0.81.5+
+  # Create umbrella header if it doesn't exist during pod installation
+  s.prepare_command = <<-CMD
+    REACT_CORE_HEADERS_PATH="${PODS_ROOT}/Headers/Public/React-Core/React"
+    UMBRELLA_HEADER_PATH="${REACT_CORE_HEADERS_PATH}/React-Core-umbrella.h"
+    
+    if [ ! -f "${UMBRELLA_HEADER_PATH}" ]; then
+      mkdir -p "${REACT_CORE_HEADERS_PATH}"
+      cat > "${UMBRELLA_HEADER_PATH}" << 'EOF'
+#ifdef __cplusplus
+#import <React/RCTBridge.h>
+#import <React/RCTBridgeModule.h>
+#import <React/RCTEventDispatcher.h>
+#import <React/RCTEventEmitter.h>
+#import <React/RCTViewManager.h>
+#else
+#import "RCTBridge.h"
+#import "RCTBridgeModule.h"
+#import "RCTEventDispatcher.h"
+#import "RCTEventEmitter.h"
+#import "RCTViewManager.h"
+#endif
+EOF
+    fi
+  CMD
+
   s.source_files = "**/*.{h,m,mm,swift,hpp,cpp}"
 end
