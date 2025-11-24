@@ -3,11 +3,11 @@ name: Publish to npm
 on:
   push:
     tags:
-      - 'v*.*.*'  # Auto-deploy on tag push
+      - "v*.*.*" # Auto-deploy on tag push
   workflow_dispatch:
     inputs:
       version_type:
-        description: 'Version type (patch/minor/major)'
+        description: "Version type (patch/minor/major)"
         required: true
         type: choice
         options:
@@ -21,19 +21,19 @@ jobs:
     permissions:
       contents: write
       id-token: write
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          ref: main  # Only deploy from main branch
+          ref: main # Only deploy from main branch
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
-          registry-url: 'https://registry.npmjs.org'
+          node-version: "20"
+          registry-url: "https://registry.npmjs.org"
 
       - name: Install dependencies
         run: npm ci
@@ -50,13 +50,13 @@ jobs:
         run: |
           VERSION_TYPE=${{ github.event.inputs.version_type }}
           CURRENT_VERSION=$(node -p "require('./package.json').version")
-          
+
           # Parse version
           IFS='.' read -r -a VERSION_PARTS <<< "$CURRENT_VERSION"
           MAJOR=${VERSION_PARTS[0]}
           MINOR=${VERSION_PARTS[1]}
           PATCH=${VERSION_PARTS[2]}
-          
+
           # Increment version
           case $VERSION_TYPE in
             major)
@@ -72,7 +72,7 @@ jobs:
               PATCH=$((PATCH + 1))
               ;;
           esac
-          
+
           NEW_VERSION="$MAJOR.$MINOR.$PATCH"
           echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
           echo "tag=v$NEW_VERSION" >> $GITHUB_OUTPUT
@@ -110,14 +110,13 @@ jobs:
           release_name: Release ${{ github.ref }}
           body: |
             ## Changes
-            
+
             See [CHANGELOG.md](CHANGELOG.md) for details.
-            
+
             ## Installation
-            
+
             ```bash
             npm install @asleep-ai/react-native-alarm@${{ env.version }}
             ```
           draft: false
           prerelease: false
-
