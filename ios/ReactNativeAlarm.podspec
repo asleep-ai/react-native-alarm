@@ -28,5 +28,32 @@ Pod::Spec.new do |s|
 
   s.source_files = "ios/**/*.{h,m,mm,swift,hpp,cpp}"
   s.public_header_files = "ios/React-Core-umbrella.h"
-  s.header_dir = 'React'
+
+  s.script_phase = {
+    :name => 'ReactNativeAlarm Umbrella Header',
+    :shell_path => '/bin/sh',
+    :execution_position => :before_compile,
+    :script => <<-'SCRIPT'
+set -euo pipefail
+
+SOURCE_HEADER="${PODS_TARGET_SRCROOT}/ios/React-Core-umbrella.h"
+if [ ! -f "${SOURCE_HEADER}" ]; then
+  SOURCE_HEADER="${PODS_TARGET_SRCROOT}/React-Core-umbrella.h"
+fi
+
+if [ ! -f "${SOURCE_HEADER}" ]; then
+  echo "ReactNativeAlarm: umbrella header missing in pod sources; skipping."
+  exit 0
+fi
+
+HEADER_DIR="${PODS_ROOT}/Headers/Public/React"
+HEADER_PATH="${HEADER_DIR}/React-Core-umbrella.h"
+
+if [ ! -f "${HEADER_PATH}" ]; then
+  mkdir -p "${HEADER_DIR}"
+  cp "${SOURCE_HEADER}" "${HEADER_PATH}"
+  echo "ReactNativeAlarm: Installed fallback React-Core-umbrella.h at ${HEADER_PATH}"
+fi
+SCRIPT
+  }
 end
