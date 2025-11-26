@@ -24,6 +24,8 @@ class ForegroundTimerService : Service() {
   private var overlayBtnBgColor: Int? = null
   private var overlayBtnTextColor: Int? = null
   private var snoozeMinutes: Int = 5
+  private var isSnoozed: Boolean = false
+  private var snoozeUntilISO: String? = null
   private val logTag = "RNAlarm"
 
   override fun onBind(intent: Intent?): IBinder? = null
@@ -59,13 +61,33 @@ class ForegroundTimerService : Service() {
         if (intent.hasExtra(EXTRA_STYLE_SNOOZE_MIN)) {
           snoozeMinutes = intent.getIntExtra(EXTRA_STYLE_SNOOZE_MIN, 5)
         }
-        android.util.Log.d(logTag, "FGTimer ACTION_START id=$id label=$label seconds=$seconds style=$notifStyle overlayBg=$overlayBgColor overlayText=$overlayTextColor btnBg=$overlayBtnBgColor btnText=$overlayBtnTextColor snoozeMin=$snoozeMinutes")
+        isSnoozed = intent.getBooleanExtra(EXTRA_IS_SNOOZED, false)
+        snoozeUntilISO = intent.getStringExtra(EXTRA_SNOOZE_UNTIL_ISO)
         targetTimeMs = System.currentTimeMillis() + seconds * 1000
         startForegroundInternal(buildNotification())
+        if (isSnoozed) {
+          ReactNativeAlarmModule.sendAlarmSnoozedEvent(id, label, snoozeUntilISO ?: "")
+          ReactNativeAlarmModule.sendAlarmStateChangedEvent(
+            id = id,
+            label = label,
+            isRinging = false,
+            isSnoozed = true,
+            remainingSeconds = seconds,
+            snoozeUntilISO = snoozeUntilISO
+          )
+        } else {
+          ReactNativeAlarmModule.sendAlarmStartedEvent(id, label, seconds)
+          ReactNativeAlarmModule.sendAlarmStateChangedEvent(
+            id = id,
+            label = label,
+            isRinging = false,
+            isSnoozed = false,
+            remainingSeconds = seconds
+          )
+        }
         tick()
       }
       ACTION_PAUSE -> {
-        android.util.Log.d(logTag, "FGTimer ACTION_PAUSE id=${timerId}")
         if (!isPaused) {
           val now = System.currentTimeMillis()
           remainingWhenPaused = ((targetTimeMs - now) / 1000).coerceAtLeast(0)
@@ -74,7 +96,6 @@ class ForegroundTimerService : Service() {
         }
       }
       ACTION_RESUME -> {
-        android.util.Log.d(logTag, "FGTimer ACTION_RESUME id=${timerId}")
         if (isPaused) {
           val now = System.currentTimeMillis()
           targetTimeMs = now + remainingWhenPaused * 1000
@@ -84,7 +105,6 @@ class ForegroundTimerService : Service() {
         }
       }
       ACTION_STOP -> {
-        android.util.Log.d(logTag, "FGTimer ACTION_STOP id=${timerId}")
         stopSelf()
       }
     }
@@ -93,10 +113,8 @@ class ForegroundTimerService : Service() {
 
   private fun startForegroundInternal(notification: Notification) {
     if (Build.VERSION.SDK_INT >= 29) {
-      android.util.Log.d(logTag, "FGTimer startForeground (Q+) id=$NOTIF_ID")
       startForeground(NOTIF_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_SHORT_SERVICE)
     } else {
-      android.util.Log.d(logTag, "FGTimer startForeground id=$NOTIF_ID")
       startForeground(NOTIF_ID, notification)
     }
   }
@@ -116,8 +134,18 @@ class ForegroundTimerService : Service() {
 
   private fun updateNotification() {
     val notif = buildNotification()
-    android.util.Log.d(logTag, "FGTimer updateNotification isPaused=$isPaused remain=${remainingSeconds()}")
+    val remain = remainingSeconds()
     startForegroundInternal(notif)
+    timerId?.let { id ->
+      ReactNativeAlarmModule.sendAlarmStateChangedEvent(
+        id = id,
+        label = label,
+        isRinging = false,
+        isSnoozed = isSnoozed,
+        remainingSeconds = remain,
+        snoozeUntilISO = if (isSnoozed) snoozeUntilISO else null
+      )
+    }
   }
 
   private fun remainingSeconds(): Long {
@@ -134,7 +162,6 @@ class ForegroundTimerService : Service() {
     if (isPaused) return
     val remain = remainingSeconds()
     if (remain <= 0) {
-      android.util.Log.d(logTag, "FGTimer tick finished id=$timerId -> start AlarmRingingService with overlayBg=$overlayBgColor overlayText=$overlayTextColor")
       finish()
       return
     }
@@ -155,6 +182,14 @@ class ForegroundTimerService : Service() {
       "overlayButtonBackgroundColor" to overlayBtnBgColor,
       "overlayButtonTextColor" to overlayBtnTextColor,
       "snoozeMinutes" to snoozeMinutes
+    )
+    ReactNativeAlarmModule.sendAlarmStartedEvent(id, label, 0)
+    ReactNativeAlarmModule.sendAlarmStateChangedEvent(
+      id = id,
+      label = label,
+      isRinging = true,
+      isSnoozed = false,
+      remainingSeconds = 0
     )
     AlarmRingingService.start(this, id, label, styleMap)
     stopForeground(true)
@@ -187,8 +222,10 @@ class ForegroundTimerService : Service() {
     const val EXTRA_STYLE_OVERLAY_BTN_BG = "style_overlay_btn_bg"
     const val EXTRA_STYLE_OVERLAY_BTN_TEXT = "style_overlay_btn_text"
     const val EXTRA_STYLE_SNOOZE_MIN = "style_snooze_min"
+    const val EXTRA_IS_SNOOZED = "extra_is_snoozed"
+    const val EXTRA_SNOOZE_UNTIL_ISO = "extra_snooze_until_iso"
 
-    fun start(context: Context, id: String, label: String?, seconds: Long, style: Map<String, Any?>) {
+    fun start(context: Context, id: String, label: String?, seconds: Long, style: Map<String, Any?>, isSnoozed: Boolean = false, snoozeUntilISO: String? = null) {
       val intent = Intent(context, ForegroundTimerService::class.java)
         .setAction(ACTION_START)
         .putExtra(EXTRA_ID, id)
@@ -204,6 +241,8 @@ class ForegroundTimerService : Service() {
       (style["overlayButtonBackgroundColor"] as? Int)?.let { intent.putExtra(EXTRA_STYLE_OVERLAY_BTN_BG, it) }
       (style["overlayButtonTextColor"] as? Int)?.let { intent.putExtra(EXTRA_STYLE_OVERLAY_BTN_TEXT, it) }
       (style["snoozeMinutes"] as? Int)?.let { intent.putExtra(EXTRA_STYLE_SNOOZE_MIN, it) }
+      intent.putExtra(EXTRA_IS_SNOOZED, isSnoozed)
+      snoozeUntilISO?.let { intent.putExtra(EXTRA_SNOOZE_UNTIL_ISO, it) }
       // Prefer startService (app usually foreground). Fall back to FGS if needed.
       try {
         context.startService(intent)

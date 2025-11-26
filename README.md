@@ -34,6 +34,7 @@ npx pod-install
 Add the `NSAlarmKitUsageDescription` key to your app's `Info.plist` file. This is required for AlarmKit to request authorization and display the permission dialog.
 
 **For Expo apps**, add to `app.json`:
+
 ```json
 {
   "expo": {
@@ -47,6 +48,7 @@ Add the `NSAlarmKitUsageDescription` key to your app's `Info.plist` file. This i
 ```
 
 **For bare React Native apps**, add to `ios/YourApp/Info.plist`:
+
 ```xml
 <key>NSAlarmKitUsageDescription</key>
 <string>We'll schedule alerts for alarms you create within our app.</string>
@@ -69,37 +71,894 @@ import {
   scheduleAlarm,
   getAlarms,
   cancelAlarm,
-} from '@asleep-ai/react-native-alarm';
+} from "@asleep-ai/react-native-alarm";
 
 async function setupAlarm() {
   // 1. Check availability (iOS 26+)
   if (!isAvailable()) {
-    console.warn('AlarmKit not available on this device');
+    console.warn("AlarmKit not available on this device");
     return;
   }
 
   // 2. Request permission
-  const granted = await requestPermission();
-  if (!granted) {
-    console.error('Permission denied');
+  const result = await requestPermission();
+  if (!result.granted) {
+    console.error("Permission denied");
     return;
   }
 
   // 3. Schedule an alarm
   const alarm = await scheduleAlarm({
     dateISO: new Date(Date.now() + 60_000).toISOString(), // 1 minute from now
-    label: 'Wake up',
+    label: "Wake up",
   });
 
-  console.log('Scheduled alarm:', alarm);
+  console.log("Scheduled alarm:", alarm);
 
   // 4. List all alarms
   const alarms = await getAlarms();
-  console.log('All alarms:', alarms);
+  console.log("All alarms:", alarms);
 
   // 5. Cancel an alarm
   await cancelAlarm(alarm.id);
 }
+```
+
+## Complete Usage Guide
+
+This guide is based on the actual implementation in the `example` folder. Follow these patterns to integrate alarms into your React Native app.
+
+### 1. Setting Up Permissions
+
+First, create a custom hook to manage permissions:
+
+```typescript
+// hooks/usePermissions.ts
+import { useState, useEffect, useCallback } from "react";
+import { Platform, Alert } from "react-native";
+import {
+  requestPermission,
+  openSettings,
+  canScheduleExactAlarms,
+  openExactAlarmSettings,
+  openOverlayPermissionSettings,
+  hasOverlayPermission,
+} from "@asleep-ai/react-native-alarm";
+
+export function usePermissions() {
+  const [exactAllowed, setExactAllowed] = useState<boolean>(false);
+  const [overlayAllowed, setOverlayAllowed] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (Platform.OS === "android") {
+      try {
+        setExactAllowed(canScheduleExactAlarms());
+        setOverlayAllowed(hasOverlayPermission());
+      } catch {
+        setExactAllowed(false);
+        setOverlayAllowed(false);
+      }
+    }
+  }, []);
+
+  const onRequestPermission = useCallback(async () => {
+    try {
+      const result = await requestPermission();
+      if (result.granted) {
+        Alert.alert("Permission", "Granted");
+      } else {
+        if (result.status === "denied") {
+          Alert.alert(
+            "Permission Denied",
+            "Alarm permission has been denied. Please enable it in Settings.",
+            [
+              { text: "Cancel", style: "cancel" },
+              {
+                text: "Open Settings",
+                onPress: async () => {
+                  await openSettings();
+                },
+              },
+            ]
+          );
+        } else {
+          Alert.alert("Permission", "Denied");
+        }
+      }
+    } catch (e: any) {
+      Alert.alert("Error", String(e?.message ?? e));
+    }
+  }, []);
+
+  const onOpenExactAlarmSettings = useCallback(async () => {
+    try {
+      const ok = await openExactAlarmSettings();
+      if (!ok) {
+        Alert.alert(
+          "Info",
+          "Unable to open settings. You can allow exact alarms in system settings."
+        );
+      }
+    } catch {
+      Alert.alert("Error", "Failed to open exact alarm settings.");
+    } finally {
+      setTimeout(() => {
+        try {
+          setExactAllowed(canScheduleExactAlarms());
+          setOverlayAllowed(hasOverlayPermission());
+        } catch {
+          setExactAllowed(false);
+          setOverlayAllowed(false);
+        }
+      }, 1000);
+    }
+  }, []);
+
+  const onOpenOverlayPermissionSettings = useCallback(async () => {
+    try {
+      const ok = await openOverlayPermissionSettings();
+      if (!ok) {
+        Alert.alert(
+          "Info",
+          "Unable to open overlay settings. You can allow overlays in system settings."
+        );
+      }
+    } catch {
+      Alert.alert("Error", "Failed to open overlay settings.");
+    } finally {
+      setTimeout(() => {
+        try {
+          setOverlayAllowed(hasOverlayPermission());
+        } catch {
+          setOverlayAllowed(false);
+        }
+      }, 1000);
+    }
+  }, []);
+
+  return {
+    exactAllowed,
+    overlayAllowed,
+    onRequestPermission,
+    onOpenExactAlarmSettings,
+    onOpenOverlayPermissionSettings,
+  };
+}
+```
+
+### 2. Managing Alarm State
+
+Create a hook to track alarm state:
+
+```typescript
+// hooks/useAlarmState.ts
+import { useState, useEffect } from "react";
+import { Platform } from "react-native";
+import {
+  isAvailable,
+  checkAlarmStates,
+  type AlarmState,
+} from "@asleep-ai/react-native-alarm";
+
+export function useAlarmState() {
+  const [available, setAvailable] = useState<boolean>(false);
+  const [alarmState, setAlarmState] = useState<AlarmState | null>(null);
+  const [alarmHistory, setAlarmHistory] = useState<AlarmState | null>(null);
+
+  useEffect(() => {
+    setAvailable(isAvailable());
+  }, []);
+
+  // Periodically check alarm states (especially for iOS)
+  useEffect(() => {
+    if (Platform.OS === "ios" && available) {
+      const id = setInterval(async () => {
+        try {
+          await checkAlarmStates();
+        } catch (e) {
+          // Ignore errors
+        }
+      }, 1000); // Check every second
+      return () => clearInterval(id);
+    }
+  }, [available]);
+
+  const saveToHistory = () => {
+    if (alarmState) {
+      setAlarmHistory(alarmState);
+    }
+  };
+
+  const clearState = () => {
+    setAlarmState(null);
+  };
+
+  return {
+    available,
+    alarmState,
+    alarmHistory,
+    setAlarmState,
+    saveToHistory,
+    clearState,
+  };
+}
+```
+
+### 3. Setting Up Event Listeners
+
+Create a hook to handle alarm events:
+
+```typescript
+// hooks/useAlarmListeners.ts
+import { useEffect, useState } from "react";
+import {
+  addAlarmStartedListener,
+  addAlarmSnoozedListener,
+  addAlarmStoppedListener,
+  addAlarmStateChangedListener,
+  type AlarmState,
+} from "@asleep-ai/react-native-alarm";
+
+interface UseAlarmListenersProps {
+  onStateChanged: (state: AlarmState) => void;
+  onStopped: () => void;
+}
+
+export function useAlarmListeners({
+  onStateChanged,
+  onStopped,
+}: UseAlarmListenersProps) {
+  const [eventLog, setEventLog] = useState<string[]>([]);
+
+  useEffect(() => {
+    const subscriptions = [
+      addAlarmStartedListener((event) => {
+        const log = `[${new Date().toLocaleTimeString()}] Alarm Started: ${event.label || event.id} (${event.remainingSeconds}s remaining)`;
+        setEventLog((prev) => [log, ...prev].slice(0, 20)); // Keep last 20 events
+        console.log("onAlarmStarted", event);
+      }),
+      addAlarmSnoozedListener((event) => {
+        const log = `[${new Date().toLocaleTimeString()}] Alarm Snoozed: ${event.label || event.id} (until ${event.snoozeUntilISO})`;
+        setEventLog((prev) => [log, ...prev].slice(0, 20));
+        console.log("onAlarmSnoozed", event);
+      }),
+      addAlarmStoppedListener((event) => {
+        const log = `[${new Date().toLocaleTimeString()}] Alarm Stopped: ${event.label || event.id} (at ${event.stoppedAtISO})`;
+        setEventLog((prev) => [log, ...prev].slice(0, 20));
+        console.log("onAlarmStopped", event);
+        onStopped();
+      }),
+      addAlarmStateChangedListener((state) => {
+        onStateChanged(state);
+        console.log("onAlarmStateChanged", state);
+      }),
+    ];
+
+    return () => {
+      subscriptions.forEach((sub) => sub.remove());
+    };
+  }, [onStateChanged, onStopped]);
+
+  return { eventLog };
+}
+```
+
+### 4. Managing Alarms
+
+Create a hook to handle alarm operations:
+
+```typescript
+// hooks/useAlarmActions.ts
+import { useState, useCallback, useEffect } from "react";
+import { Platform, Alert } from "react-native";
+import {
+  scheduleAlarm,
+  getAlarms,
+  cancelAlarm,
+  cancelAll,
+  type Alarm,
+} from "@asleep-ai/react-native-alarm";
+import type { AlarmConfig } from "./useAlarmConfig";
+
+interface UseAlarmActionsProps {
+  config: AlarmConfig;
+}
+
+export function useAlarmActions({ config }: UseAlarmActionsProps) {
+  const [alarms, setAlarms] = useState<Alarm[]>([]);
+  const [lastScheduled, setLastScheduled] = useState<Alarm | null>(null);
+
+  const refresh = useCallback(async () => {
+    try {
+      const list = await getAlarms();
+      setAlarms(list);
+    } catch (e: any) {
+      Alert.alert("Error", String(e?.message ?? e));
+    }
+  }, []);
+
+  // Load alarms on mount
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
+
+  const onScheduleIn = useCallback(
+    async (seconds: number) => {
+      try {
+        const dateISO = new Date(Date.now() + seconds * 1000).toISOString();
+        const a = await scheduleAlarm({
+          dateISO,
+          label: `Test Alarm (${seconds}s)`,
+          countdownSeconds: seconds,
+          android:
+            Platform.OS === "android"
+              ? {
+                  smallIconName: config.androidSmallIcon || undefined,
+                  accentColor: config.androidAccentColor,
+                  useChronometer: config.androidUseChrono,
+                  showOverlayWhenUnlocked: config.androidOverlayUnlocked,
+                  overlayBackgroundColor: config.androidOverlayBg,
+                  overlayTextColor: config.androidOverlayText,
+                  overlayButtonBackgroundColor: config.androidOverlayBtnBg,
+                  overlayButtonTextColor: config.androidOverlayBtnText,
+                  snoozeMinutes: 3,
+                }
+              : undefined,
+          ios:
+            Platform.OS === "ios"
+              ? {
+                  snoozeMinutes: 3,
+                }
+              : undefined,
+        });
+        setLastScheduled(a);
+        await refresh();
+      } catch (e: any) {
+        Alert.alert("Error", String(e?.message ?? e));
+      }
+    },
+    [config, refresh]
+  );
+
+  const onStartTimer = useCallback(
+    async (seconds: number) => {
+      try {
+        const a = await scheduleAlarm({
+          label: `Timer (${seconds}s)`,
+          countdownSeconds: seconds,
+          android:
+            Platform.OS === "android"
+              ? {
+                  smallIconName: config.androidSmallIcon || undefined,
+                  accentColor: config.androidAccentColor,
+                  useChronometer: config.androidUseChrono,
+                  showOverlayWhenUnlocked: config.androidOverlayUnlocked,
+                  overlayBackgroundColor: config.androidOverlayBg,
+                  overlayTextColor: config.androidOverlayText,
+                  overlayButtonBackgroundColor: config.androidOverlayBtnBg,
+                  overlayButtonTextColor: config.androidOverlayBtnText,
+                  snoozeMinutes: 3,
+                }
+              : undefined,
+          ios:
+            Platform.OS === "ios"
+              ? {
+                  snoozeMinutes: 3,
+                }
+              : undefined,
+        });
+        setLastScheduled(a);
+        await refresh();
+      } catch (e: any) {
+        Alert.alert("Error", String(e?.message ?? e));
+      }
+    },
+    [config, refresh]
+  );
+
+  const onCancelLast = useCallback(async () => {
+    try {
+      const target = lastScheduled ?? alarms[alarms.length - 1];
+      if (!target) {
+        Alert.alert("Info", "No alarm to cancel");
+        return;
+      }
+      await cancelAlarm(target.id);
+      if (lastScheduled?.id === target.id) setLastScheduled(null);
+      await refresh();
+    } catch (e: any) {
+      Alert.alert("Error", String(e?.message ?? e));
+    }
+  }, [alarms, lastScheduled, refresh]);
+
+  const onCancelAlarm = useCallback(
+    async (alarmId: string) => {
+      try {
+        await cancelAlarm(alarmId);
+        if (lastScheduled?.id === alarmId) setLastScheduled(null);
+        await refresh();
+      } catch (e: any) {
+        Alert.alert("Error", String(e?.message ?? e));
+      }
+    },
+    [lastScheduled, refresh]
+  );
+
+  const onCancelAll = useCallback(async () => {
+    try {
+      await cancelAll();
+      setLastScheduled(null);
+      await refresh();
+    } catch (e: any) {
+      Alert.alert("Error", String(e?.message ?? e));
+    }
+  }, [refresh]);
+
+  return {
+    alarms,
+    lastScheduled,
+    refreshAlarms: refresh,
+    onScheduleIn,
+    onStartTimer,
+    onCancelLast,
+    onCancelAlarm,
+    onCancelAll,
+  };
+}
+```
+
+### 5. Configuring Alarm Styles
+
+Create a hook to manage alarm configuration:
+
+```typescript
+// hooks/useAlarmConfig.ts
+import { useState, useCallback } from "react";
+import { Alert } from "react-native";
+import { configure } from "@asleep-ai/react-native-alarm";
+
+export interface AlarmConfig {
+  androidSmallIcon: string;
+  androidAccentColor: string;
+  androidUseChrono: boolean;
+  androidOverlayUnlocked: boolean;
+  androidOverlayBg: string;
+  androidOverlayText: string;
+  androidOverlayBtnBg: string;
+  androidOverlayBtnText: string;
+  iosTint: string;
+  iosStopText: string;
+  iosPauseText: string;
+  iosResumeText: string;
+}
+
+export function useAlarmConfig() {
+  const [androidSmallIcon, setAndroidSmallIcon] = useState<string>("");
+  const [androidAccentColor, setAndroidAccentColor] =
+    useState<string>("#4CAF50");
+  const [androidUseChrono, setAndroidUseChrono] = useState<boolean>(true);
+  const [androidOverlayUnlocked, setAndroidOverlayUnlocked] =
+    useState<boolean>(true);
+  const [androidOverlayBg, setAndroidOverlayBg] = useState<string>("#000000");
+  const [androidOverlayText, setAndroidOverlayText] =
+    useState<string>("#FFFFFF");
+  const [androidOverlayBtnBg, setAndroidOverlayBtnBg] =
+    useState<string>("#3b82f6");
+  const [androidOverlayBtnText, setAndroidOverlayBtnText] =
+    useState<string>("#FFFFFF");
+  const [iosTint, setIosTint] = useState<string>("#007AFF");
+  const [iosStopText, setIosStopText] = useState<string>("Done");
+  const [iosPauseText, setIosPauseText] = useState<string>("Pause");
+  const [iosResumeText, setIosResumeText] = useState<string>("Start");
+
+  const config: AlarmConfig = {
+    androidSmallIcon,
+    androidAccentColor,
+    androidUseChrono,
+    androidOverlayUnlocked,
+    androidOverlayBg,
+    androidOverlayText,
+    androidOverlayBtnBg,
+    androidOverlayBtnText,
+    iosTint,
+    iosStopText,
+    iosPauseText,
+    iosResumeText,
+  };
+
+  const onApplyConfig = useCallback(async () => {
+    try {
+      await configure({
+        android: {
+          smallIconName: androidSmallIcon || undefined,
+          accentColor: androidAccentColor,
+          useChronometer: androidUseChrono,
+          showOverlayWhenUnlocked: androidOverlayUnlocked,
+          overlayBackgroundColor: androidOverlayBg,
+          overlayTextColor: androidOverlayText,
+          overlayButtonBackgroundColor: androidOverlayBtnBg,
+          overlayButtonTextColor: androidOverlayBtnText,
+        },
+        ios: {
+          tintColorHex: iosTint,
+          alertStopText: iosStopText,
+          countdownPauseText: iosPauseText,
+          pausedResumeText: iosResumeText,
+        },
+      });
+      Alert.alert("Config", "Applied");
+    } catch (e: any) {
+      Alert.alert("Error", String(e?.message ?? e));
+    }
+  }, [
+    androidSmallIcon,
+    androidAccentColor,
+    androidUseChrono,
+    androidOverlayUnlocked,
+    androidOverlayBg,
+    androidOverlayText,
+    androidOverlayBtnBg,
+    androidOverlayBtnText,
+    iosTint,
+    iosStopText,
+    iosPauseText,
+    iosResumeText,
+  ]);
+
+  return {
+    config,
+    setters: {
+      setAndroidSmallIcon,
+      setAndroidAccentColor,
+      setAndroidUseChrono,
+      setAndroidOverlayUnlocked,
+      setAndroidOverlayBg,
+      setAndroidOverlayText,
+      setAndroidOverlayBtnBg,
+      setAndroidOverlayBtnText,
+      setIosTint,
+      setIosStopText,
+      setIosPauseText,
+      setIosResumeText,
+    },
+    onApplyConfig,
+  };
+}
+```
+
+### 6. Creating UI Components
+
+Create components to display alarm state and alarms:
+
+```typescript
+// components/AlarmStateView.tsx
+import React from 'react';
+import { View, Text, StyleSheet } from 'react-native';
+import type { AlarmState } from '@asleep-ai/react-native-alarm';
+
+interface AlarmStateViewProps {
+  alarmState: AlarmState | null;
+  alarmHistory: AlarmState | null;
+}
+
+export function AlarmStateView({
+  alarmState,
+  alarmHistory,
+}: AlarmStateViewProps) {
+  if (alarmState) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.header}>
+          <View
+            style={[
+              styles.indicator,
+              {
+                backgroundColor: alarmState.isRinging
+                  ? '#ef4444'
+                  : alarmState.isSnoozed
+                    ? '#f59e0b'
+                    : '#10b981',
+              },
+            ]}
+          />
+          <Text style={styles.title}>{alarmState.label || alarmState.id}</Text>
+        </View>
+        <Text>
+          Status:{' '}
+          {alarmState.isRinging
+            ? '🔔 Ringing'
+            : alarmState.isSnoozed
+              ? '⏰ Snoozed'
+              : '⏱️ Countdown'}
+        </Text>
+        {alarmState.remainingSeconds > 0 && (
+          <Text>
+            Remaining: {Math.floor(alarmState.remainingSeconds / 60)}m{' '}
+            {alarmState.remainingSeconds % 60}s
+          </Text>
+        )}
+        {alarmState.isSnoozed && alarmState.snoozeUntilISO && (
+          <Text>
+            Snooze until: {new Date(alarmState.snoozeUntilISO).toLocaleString()}
+          </Text>
+        )}
+        {alarmState.stoppedAtISO && (
+          <Text style={styles.muted}>
+            Stopped at: {new Date(alarmState.stoppedAtISO).toLocaleString()}
+          </Text>
+        )}
+      </View>
+    );
+  }
+
+  if (alarmHistory) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.header}>
+          <View style={[styles.indicator, { backgroundColor: '#9ca3af' }]} />
+          <Text style={styles.title}>
+            {alarmHistory.label || alarmHistory.id}
+          </Text>
+          <Text style={styles.historyLabel}>(History)</Text>
+        </View>
+        <Text style={styles.muted}>
+          Status:{' '}
+          {alarmHistory.isRinging
+            ? '🔔 Ringing'
+            : alarmHistory.isSnoozed
+              ? '⏰ Snoozed'
+              : '⏱️ Countdown'}
+        </Text>
+        {alarmHistory.stoppedAtISO && (
+          <Text style={styles.muted}>
+            Stopped at: {new Date(alarmHistory.stoppedAtISO).toLocaleString()}
+          </Text>
+        )}
+      </View>
+    );
+  }
+
+  return <Text style={styles.muted}>No active alarm</Text>;
+}
+
+const styles = StyleSheet.create({
+  container: {
+    gap: 8,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  indicator: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+  },
+  title: {
+    fontWeight: '600',
+    fontSize: 16,
+  },
+  historyLabel: {
+    color: '#6b7280',
+    fontSize: 12,
+  },
+  muted: {
+    color: '#6b7280',
+  },
+});
+```
+
+```typescript
+// components/AlarmCard.tsx
+import React from 'react';
+import { View, Text, Button, StyleSheet } from 'react-native';
+import type { Alarm } from '@asleep-ai/react-native-alarm';
+
+interface AlarmCardProps {
+  alarm: Alarm;
+  onCancel: (alarmId: string) => void;
+}
+
+export function AlarmCard({ alarm, onCancel }: AlarmCardProps) {
+  return (
+    <View style={styles.card}>
+      <View style={styles.header}>
+        <View style={styles.info}>
+          <Text style={styles.label}>{alarm.label || '(No label)'}</Text>
+          <Text style={styles.id}>ID: {alarm.id.substring(0, 8)}...</Text>
+        </View>
+        <Button title="Cancel" onPress={() => onCancel(alarm.id)} />
+      </View>
+      <View style={styles.details}>
+        <Text style={styles.detailText}>
+          <Text style={styles.detailLabel}>Date: </Text>
+          {new Date(alarm.dateISO).toLocaleString()}
+        </Text>
+        <Text style={styles.detailText}>
+          <Text style={styles.detailLabel}>Status: </Text>
+          <Text
+            style={[
+              styles.statusText,
+              {
+                color: alarm.isRinging
+                  ? '#ef4444'
+                  : alarm.isSnoozed
+                    ? '#f59e0b'
+                    : alarm.enabled
+                      ? '#10b981'
+                      : '#ef4444',
+              },
+            ]}
+          >
+            {alarm.isRinging
+              ? '🔔 Ringing'
+              : alarm.isSnoozed
+                ? '⏰ Snoozed'
+                : alarm.enabled
+                  ? '⏱️ Scheduled'
+                  : '❌ Disabled'}
+          </Text>
+        </Text>
+        {alarm.isSnoozed && alarm.snoozeUntilISO && (
+          <Text style={styles.detailText}>
+            <Text style={styles.detailLabel}>Snooze until: </Text>
+            {new Date(alarm.snoozeUntilISO).toLocaleString()}
+          </Text>
+        )}
+        {alarm.remainingSeconds !== undefined && alarm.remainingSeconds > 0 && (
+          <Text style={styles.detailText}>
+            <Text style={styles.detailLabel}>Remaining: </Text>
+            {Math.floor(alarm.remainingSeconds / 60)}m{' '}
+            {alarm.remainingSeconds % 60}s
+          </Text>
+        )}
+      </View>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  card: {
+    padding: 12,
+    backgroundColor: '#f9fafb',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+  },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 8,
+  },
+  info: {
+    flex: 1,
+  },
+  label: {
+    fontWeight: '600',
+    fontSize: 16,
+    marginBottom: 4,
+  },
+  id: {
+    fontSize: 12,
+    color: '#6b7280',
+  },
+  details: {
+    gap: 4,
+  },
+  detailText: {
+    fontSize: 14,
+  },
+  detailLabel: {
+    fontWeight: '600',
+  },
+  statusText: {
+    fontWeight: '500',
+  },
+});
+```
+
+### 7. Putting It All Together
+
+Here's how to use all these hooks in your main App component:
+
+```typescript
+// App.tsx
+import React, { useState, useEffect } from 'react';
+import { StyleSheet } from 'react-native';
+import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
+import { useAlarmState } from './hooks/useAlarmState';
+import { useAlarmListeners } from './hooks/useAlarmListeners';
+import { useAlarmActions } from './hooks/useAlarmActions';
+import { useAlarmConfig } from './hooks/useAlarmConfig';
+import { usePermissions } from './hooks/usePermissions';
+import { ActionsScreen } from './screens/ActionsScreen';
+
+export default function App() {
+  const [nowISO, setNowISO] = useState<string>(new Date().toISOString());
+
+  const {
+    available,
+    alarmState,
+    alarmHistory,
+    setAlarmState,
+    saveToHistory,
+    clearState,
+  } = useAlarmState();
+
+  const { eventLog } = useAlarmListeners({
+    onStateChanged: setAlarmState,
+    onStopped: () => {
+      saveToHistory();
+      clearState();
+      refreshAlarmsList();
+    },
+  });
+
+  const { config } = useAlarmConfig();
+
+  const {
+    alarms,
+    lastScheduled,
+    refreshAlarms: refreshAlarmsList,
+    onScheduleIn,
+    onStartTimer,
+    onCancelLast,
+    onCancelAlarm,
+    onCancelAll,
+  } = useAlarmActions({
+    config,
+  });
+
+  const {
+    exactAllowed,
+    overlayAllowed,
+    onRequestPermission,
+    onOpenExactAlarmSettings,
+    onOpenOverlayPermissionSettings,
+  } = usePermissions();
+
+  useEffect(() => {
+    const id = setInterval(() => {
+      setNowISO(new Date().toISOString());
+    }, 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  return (
+    <SafeAreaProvider>
+      <SafeAreaView style={styles.container} edges={['top']}>
+        <ActionsScreen
+          alarmState={alarmState}
+          alarmHistory={alarmHistory}
+          alarms={alarms}
+          eventLog={eventLog}
+          lastScheduled={lastScheduled}
+          nowISO={nowISO}
+          onRequestPermission={onRequestPermission}
+          exactAllowed={exactAllowed}
+          overlayAllowed={overlayAllowed}
+          onOpenExactAlarmSettings={onOpenExactAlarmSettings}
+          onOpenOverlayPermissionSettings={onOpenOverlayPermissionSettings}
+          onScheduleIn={onScheduleIn}
+          onStartTimer={onStartTimer}
+          onCancelLast={onCancelLast}
+          onCancelAlarm={onCancelAlarm}
+          onCancelAll={onCancelAll}
+          refreshAlarms={refreshAlarmsList}
+        />
+      </SafeAreaView>
+    </SafeAreaProvider>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#eee',
+  },
+});
 ```
 
 ## API Reference
@@ -116,16 +975,18 @@ if (isAvailable()) {
 }
 ```
 
-#### `requestPermission(): Promise<boolean>`
+#### `requestPermission(): Promise<{ granted: boolean; status: string }>`
 
 Requests alarm permission from the user. On iOS, this requests AlarmKit authorization. On Android, this requests notification permission.
 
-**Returns:** `Promise<boolean>` - `true` if permission was granted, `false` otherwise.
+**Returns:** `Promise<{ granted: boolean; status: string }>` - Object with `granted` boolean and `status` string.
 
 ```typescript
-const granted = await requestPermission();
-if (!granted) {
-  // Handle permission denial
+const result = await requestPermission();
+if (result.granted) {
+  // Permission granted
+} else if (result.status === "denied") {
+  // Permission denied, guide user to settings
 }
 ```
 
@@ -134,7 +995,7 @@ if (!granted) {
 Checks if the app can schedule exact alarms on Android. Exact alarms are required for precise timing.
 
 ```typescript
-if (Platform.OS === 'android') {
+if (Platform.OS === "android") {
   const canSchedule = canScheduleExactAlarms();
   if (!canSchedule) {
     // Guide user to enable exact alarms in settings
@@ -147,7 +1008,7 @@ if (Platform.OS === 'android') {
 Checks if the app has permission to display overlay windows (for alarm UI).
 
 ```typescript
-if (Platform.OS === 'android') {
+if (Platform.OS === "android") {
   const hasOverlay = hasOverlayPermission();
 }
 ```
@@ -166,6 +1027,14 @@ Opens the system settings page for overlay permissions.
 
 ```typescript
 const opened = await openOverlayPermissionSettings();
+```
+
+#### `openSettings(): Promise<void>`
+
+Opens the app's system settings page (iOS).
+
+```typescript
+await openSettings();
 ```
 
 #### `getAndroidPermissionStatus(): Promise<{...}>` (Android only)
@@ -194,21 +1063,21 @@ Schedules a new alarm or timer.
 type ScheduleAlarmOptions = {
   // ISO 8601 date string for when the alarm should fire
   dateISO?: string;
-  
+
   // Label/name for the alarm
   label?: string;
-  
+
   // Whether to allow snooze (iOS only)
   allowSnooze?: boolean;
-  
+
   // Sound identifier (platform-specific)
   sound?: string;
-  
+
   // Countdown duration in seconds (starts immediately)
-  // If both dateISO and countdownSeconds are provided, 
+  // If both dateISO and countdownSeconds are provided,
   // the alarm includes both a countdown and a scheduled alert
   countdownSeconds?: number;
-  
+
   // Platform-specific styling (optional)
   android?: AndroidNotificationStyle;
   ios?: IOSAlarmStyle;
@@ -221,8 +1090,8 @@ type ScheduleAlarmOptions = {
 
 ```typescript
 const alarm = await scheduleAlarm({
-  dateISO: new Date('2024-12-25T08:00:00Z').toISOString(),
-  label: 'Christmas Morning',
+  dateISO: new Date("2024-12-25T08:00:00Z").toISOString(),
+  label: "Christmas Morning",
 });
 ```
 
@@ -230,7 +1099,7 @@ const alarm = await scheduleAlarm({
 
 ```typescript
 const timer = await scheduleAlarm({
-  label: 'Pomodoro Timer',
+  label: "Pomodoro Timer",
   countdownSeconds: 1500, // 25 minutes
 });
 ```
@@ -241,7 +1110,7 @@ const timer = await scheduleAlarm({
 // This creates a countdown that starts immediately and fires an alert at the scheduled time
 const alarm = await scheduleAlarm({
   dateISO: new Date(Date.now() + 3600_000).toISOString(), // 1 hour from now
-  label: 'Meeting Reminder',
+  label: "Meeting Reminder",
   countdownSeconds: 3600, // Countdown for 1 hour
 });
 ```
@@ -251,16 +1120,16 @@ const alarm = await scheduleAlarm({
 ```typescript
 const alarm = await scheduleAlarm({
   dateISO: new Date(Date.now() + 60_000).toISOString(),
-  label: 'Wake Up',
+  label: "Wake Up",
   android: {
-    smallIconName: 'ic_stat_alarm',
-    accentColor: '#4CAF50',
+    smallIconName: "ic_stat_alarm",
+    accentColor: "#4CAF50",
     useChronometer: true,
     showOverlayWhenUnlocked: true,
-    overlayBackgroundColor: '#000000',
-    overlayTextColor: '#FFFFFF',
-    overlayButtonBackgroundColor: '#3b82f6',
-    overlayButtonTextColor: '#FFFFFF',
+    overlayBackgroundColor: "#000000",
+    overlayTextColor: "#FFFFFF",
+    overlayButtonBackgroundColor: "#3b82f6",
+    overlayButtonTextColor: "#FFFFFF",
     snoozeMinutes: 5,
   },
 });
@@ -271,12 +1140,13 @@ const alarm = await scheduleAlarm({
 ```typescript
 const alarm = await scheduleAlarm({
   dateISO: new Date(Date.now() + 60_000).toISOString(),
-  label: 'Wake Up',
+  label: "Wake Up",
   ios: {
-    tintColorHex: '#007AFF',
-    alertStopText: 'Done',
-    countdownPauseText: 'Pause',
-    pausedResumeText: 'Start',
+    tintColorHex: "#007AFF",
+    alertStopText: "Done",
+    countdownPauseText: "Pause",
+    pausedResumeText: "Start",
+    snoozeMinutes: 5,
   },
 });
 ```
@@ -293,6 +1163,11 @@ type Alarm = {
   dateISO: string; // ISO 8601 date string
   label?: string;
   enabled: boolean;
+  // State information (optional, may not be present in all contexts)
+  isRinging?: boolean;
+  isSnoozed?: boolean;
+  remainingSeconds?: number;
+  snoozeUntilISO?: string;
 };
 ```
 
@@ -300,7 +1175,7 @@ type Alarm = {
 
 ```typescript
 const alarms = await getAlarms();
-alarms.forEach(alarm => {
+alarms.forEach((alarm) => {
   console.log(`${alarm.label}: ${alarm.dateISO}`);
 });
 ```
@@ -310,6 +1185,7 @@ alarms.forEach(alarm => {
 Cancels a specific alarm by ID.
 
 **Parameters:**
+
 - `id: string` - The alarm ID returned from `scheduleAlarm()`
 
 **Example:**
@@ -328,6 +1204,173 @@ Cancels all scheduled alarms.
 
 ```typescript
 await cancelAll();
+```
+
+#### `checkAlarmStates(): Promise<void>`
+
+Manually triggers a check for alarm state changes. Useful for iOS where periodic checks may be needed.
+
+**Example:**
+
+```typescript
+// Check every second (iOS)
+useEffect(() => {
+  if (Platform.OS === "ios" && available) {
+    const id = setInterval(async () => {
+      await checkAlarmStates();
+    }, 1000);
+    return () => clearInterval(id);
+  }
+}, [available]);
+```
+
+### Event Listeners
+
+The library provides event listeners to track alarm state changes in real-time. This is useful for updating your app's UI when alarms start, stop, or are snoozed.
+
+#### `addAlarmStartedListener(listener): Subscription`
+
+Listens for when an alarm starts (countdown begins or alarm starts ringing).
+
+```typescript
+import { addAlarmStartedListener } from "@asleep-ai/react-native-alarm";
+
+const subscription = addAlarmStartedListener((event) => {
+  console.log("Alarm started:", event.id);
+  console.log("Label:", event.label);
+  console.log("Remaining seconds:", event.remainingSeconds);
+  // Update your UI, show modal, etc.
+});
+
+// Don't forget to remove the listener when done
+subscription.remove();
+```
+
+#### `addAlarmSnoozedListener(listener): Subscription`
+
+Listens for when an alarm is snoozed.
+
+```typescript
+import { addAlarmSnoozedListener } from "@asleep-ai/react-native-alarm";
+
+const subscription = addAlarmSnoozedListener((event) => {
+  console.log("Alarm snoozed:", event.id);
+  console.log("Snooze until:", event.snoozeUntilISO);
+  // Update your UI
+});
+
+subscription.remove();
+```
+
+#### `addAlarmStoppedListener(listener): Subscription`
+
+Listens for when an alarm is stopped.
+
+```typescript
+import { addAlarmStoppedListener } from "@asleep-ai/react-native-alarm";
+
+const subscription = addAlarmStoppedListener((event) => {
+  console.log("Alarm stopped:", event.id);
+  console.log("Stopped at:", event.stoppedAtISO);
+  // Update your UI, hide modal, etc.
+});
+
+subscription.remove();
+```
+
+#### `addAlarmStateChangedListener(listener): Subscription`
+
+Listens for any alarm state changes. This provides comprehensive state information including whether the alarm is ringing, snoozed, and remaining time.
+
+```typescript
+import {
+  addAlarmStateChangedListener,
+  type AlarmState,
+} from "@asleep-ai/react-native-alarm";
+
+const subscription = addAlarmStateChangedListener((state: AlarmState) => {
+  console.log("Alarm state changed:", state.id);
+  console.log("Is ringing:", state.isRinging);
+  console.log("Is snoozed:", state.isSnoozed);
+  console.log("Remaining seconds:", state.remainingSeconds);
+  console.log("Stopped at:", state.stoppedAtISO);
+  console.log("Snooze until:", state.snoozeUntilISO);
+
+  // Use this to update your app's UI
+  if (state.isRinging) {
+    // Show alarm modal in your app
+  } else if (state.isSnoozed) {
+    // Show snooze status
+  }
+});
+
+subscription.remove();
+```
+
+**Event Types:**
+
+```typescript
+type AlarmState = {
+  id: string;
+  label?: string;
+  isRinging: boolean; // 현재 알람이 울리고 있는지
+  isSnoozed: boolean; // 현재 스누즈 중인지
+  remainingSeconds: number; // 남은 시간 (초)
+  stoppedAtISO?: string; // 알람이 정지된 시간 (ISO 8601)
+  snoozeUntilISO?: string; // 스누즈가 끝나는 시간 (ISO 8601)
+};
+```
+
+**Example: Using events with React hooks**
+
+```typescript
+import { useEffect, useState } from 'react';
+import {
+  addAlarmStateChangedListener,
+  type AlarmState,
+} from '@asleep-ai/react-native-alarm';
+
+function AlarmMonitor() {
+  const [currentAlarm, setCurrentAlarm] = useState<AlarmState | null>(null);
+
+  useEffect(() => {
+    const subscription = addAlarmStateChangedListener((state) => {
+      setCurrentAlarm(state);
+    });
+
+    return () => {
+      subscription.remove();
+    };
+  }, []);
+
+  if (!currentAlarm) {
+    return null;
+  }
+
+  return (
+    <View>
+      {currentAlarm.isRinging && (
+        <Text>Alarm is ringing: {currentAlarm.label}</Text>
+      )}
+      {currentAlarm.isSnoozed && (
+        <Text>Snoozed until: {currentAlarm.snoozeUntilISO}</Text>
+      )}
+      {currentAlarm.remainingSeconds > 0 && (
+        <Text>Time remaining: {currentAlarm.remainingSeconds}s</Text>
+      )}
+    </View>
+  );
+}
+```
+
+#### `removeAllListeners(): void`
+
+Removes all event listeners at once.
+
+```typescript
+import { removeAllListeners } from "@asleep-ai/react-native-alarm";
+
+removeAllListeners();
 ```
 
 ### Configuration
@@ -363,6 +1406,7 @@ type IOSAlarmStyle = {
   alertStopText?: string; // default: 'Done'
   countdownPauseText?: string; // default: 'Pause'
   pausedResumeText?: string; // default: 'Start'
+  snoozeMinutes?: number; // default: 5
 };
 ```
 
@@ -371,21 +1415,22 @@ type IOSAlarmStyle = {
 ```typescript
 await configure({
   android: {
-    accentColor: '#4CAF50',
-    smallIconName: 'ic_stat_alarm',
+    accentColor: "#4CAF50",
+    smallIconName: "ic_stat_alarm",
     useChronometer: true,
     showOverlayWhenUnlocked: true,
-    overlayBackgroundColor: '#000000',
-    overlayTextColor: '#FFFFFF',
-    overlayButtonBackgroundColor: '#3b82f6',
-    overlayButtonTextColor: '#FFFFFF',
+    overlayBackgroundColor: "#000000",
+    overlayTextColor: "#FFFFFF",
+    overlayButtonBackgroundColor: "#3b82f6",
+    overlayButtonTextColor: "#FFFFFF",
     snoozeMinutes: 5,
   },
   ios: {
-    tintColorHex: '#007AFF',
-    alertStopText: 'Done',
-    countdownPauseText: 'Pause',
-    pausedResumeText: 'Start',
+    tintColorHex: "#007AFF",
+    alertStopText: "Done",
+    countdownPauseText: "Pause",
+    pausedResumeText: "Start",
+    snoozeMinutes: 5,
   },
 });
 ```
@@ -400,10 +1445,12 @@ await configure({
 - **Dynamic Island Integration**: Timers appear in the Dynamic Island on supported devices
 
 **Important Notes:**
+
 - Requires iOS 26.0 or later
 - AlarmKit is weak-linked, so the library checks availability at runtime
 - Alarms persist across app restarts
 - System manages alarm presentation and user interactions
+- Periodic state checks may be needed using `checkAlarmStates()`
 
 ### Android
 
@@ -413,146 +1460,11 @@ await configure({
 - **Battery Optimization**: May need to be disabled for reliable alarms
 
 **Important Notes:**
+
 - Exact alarm permission must be granted by the user
 - Overlay permission required for full-screen alarm UI
 - Battery optimization may affect alarm reliability
 - Custom notification icons can be added to `android/app/src/main/res/drawable/`
-
-## Complete Example
-
-Here's a complete example demonstrating common use cases:
-
-```typescript
-import React, { useEffect, useState } from 'react';
-import { View, Button, Alert } from 'react-native';
-import {
-  isAvailable,
-  requestPermission,
-  scheduleAlarm,
-  getAlarms,
-  cancelAlarm,
-  configure,
-  type Alarm,
-} from '@asleep-ai/react-native-alarm';
-import { Platform } from 'react-native';
-
-export default function AlarmScreen() {
-  const [alarms, setAlarms] = useState<Alarm[]>([]);
-  const [permissionGranted, setPermissionGranted] = useState(false);
-
-  useEffect(() => {
-    checkAvailability();
-    loadAlarms();
-  }, []);
-
-  const checkAvailability = async () => {
-    if (!isAvailable()) {
-      Alert.alert('Not Available', 'AlarmKit requires iOS 26+');
-      return;
-    }
-
-    const granted = await requestPermission();
-    setPermissionGranted(granted);
-    
-    if (!granted) {
-      Alert.alert('Permission Required', 'Please grant alarm permission');
-    }
-  };
-
-  const loadAlarms = async () => {
-    try {
-      const list = await getAlarms();
-      setAlarms(list);
-    } catch (error) {
-      console.error('Failed to load alarms:', error);
-    }
-  };
-
-  const scheduleWakeUpAlarm = async () => {
-    if (!permissionGranted) {
-      Alert.alert('Permission Required', 'Please grant alarm permission first');
-      return;
-    }
-
-    try {
-      // Schedule alarm for 8:00 AM tomorrow
-      const tomorrow = new Date();
-      tomorrow.setDate(tomorrow.getDate() + 1);
-      tomorrow.setHours(8, 0, 0, 0);
-
-      const alarm = await scheduleAlarm({
-        dateISO: tomorrow.toISOString(),
-        label: 'Wake Up',
-        android: {
-          accentColor: '#4CAF50',
-          smallIconName: 'ic_stat_alarm',
-        },
-        ios: {
-          tintColorHex: '#007AFF',
-        },
-      });
-
-      Alert.alert('Success', `Alarm scheduled: ${alarm.label}`);
-      await loadAlarms();
-    } catch (error) {
-      Alert.alert('Error', `Failed to schedule alarm: ${error}`);
-    }
-  };
-
-  const startTimer = async (minutes: number) => {
-    if (!permissionGranted) {
-      Alert.alert('Permission Required', 'Please grant alarm permission first');
-      return;
-    }
-
-    try {
-      const alarm = await scheduleAlarm({
-        label: `${minutes} Minute Timer`,
-        countdownSeconds: minutes * 60,
-      });
-
-      Alert.alert('Timer Started', `${minutes} minute timer started`);
-      await loadAlarms();
-    } catch (error) {
-      Alert.alert('Error', `Failed to start timer: ${error}`);
-    }
-  };
-
-  const cancelAlarmById = async (id: string) => {
-    try {
-      await cancelAlarm(id);
-      Alert.alert('Cancelled', 'Alarm cancelled');
-      await loadAlarms();
-    } catch (error) {
-      Alert.alert('Error', `Failed to cancel alarm: ${error}`);
-    }
-  };
-
-  return (
-    <View style={{ padding: 20 }}>
-      <Button title="Request Permission" onPress={checkAvailability} />
-      <Button title="Schedule Wake Up Alarm" onPress={scheduleWakeUpAlarm} />
-      <Button title="Start 5 Min Timer" onPress={() => startTimer(5)} />
-      <Button title="Start 25 Min Timer" onPress={() => startTimer(25)} />
-      <Button title="Refresh Alarms" onPress={loadAlarms} />
-
-      <View style={{ marginTop: 20 }}>
-        <Text style={{ fontSize: 18, fontWeight: 'bold' }}>Scheduled Alarms:</Text>
-        {alarms.map(alarm => (
-          <View key={alarm.id} style={{ marginVertical: 10 }}>
-            <Text>{alarm.label || 'Unnamed Alarm'}</Text>
-            <Text>{new Date(alarm.dateISO).toLocaleString()}</Text>
-            <Button
-              title="Cancel"
-              onPress={() => cancelAlarmById(alarm.id)}
-            />
-          </View>
-        ))}
-      </View>
-    </View>
-  );
-}
-```
 
 ## Android Customization
 
@@ -566,12 +1478,13 @@ To use custom notification icons on Android:
 ```typescript
 await configure({
   android: {
-    smallIconName: 'ic_stat_alarm', // Your drawable name without extension
+    smallIconName: "ic_stat_alarm", // Your drawable name without extension
   },
 });
 ```
 
 Common icon names:
+
 - `ic_stat_alarm`
 - `ic_stat_timer`
 - `ic_alarm_small`
@@ -579,6 +1492,7 @@ Common icon names:
 ### Notification Channels
 
 The library creates two notification channels:
+
 - **Timers**: `react_native_alarm_timers_high` (high priority)
 - **Alerts**: `react_native_alarm_alerts` (default priority)
 
@@ -589,29 +1503,37 @@ You can customize these channel IDs in the configuration.
 ### iOS Issues
 
 **"AlarmKit not available"**
+
 - Ensure you're running on iOS 26.0 or later
 - Check that AlarmKit framework is available (weak-linked)
 
 **"Permission denied"**
+
 - User must grant alarm permission in system settings
 - Check permission status before scheduling alarms
+- Use `openSettings()` to guide users to settings
 
 **Alarms not firing**
+
 - Verify the device is not in Do Not Disturb mode
 - Check that alarms are enabled in system settings
+- Ensure `checkAlarmStates()` is called periodically for iOS
 
 ### Android Issues
 
 **Alarms not firing on time**
+
 - Ensure exact alarm permission is granted
 - Check battery optimization settings
 - Verify overlay permission if using overlay UI
 
 **Overlay not showing**
+
 - Request overlay permission: `openOverlayPermissionSettings()`
 - Check that `showOverlayWhenUnlocked` is enabled
 
 **Custom icons not showing**
+
 - Verify icon files are in `android/app/src/main/res/drawable/`
 - Check that icon names match exactly (case-sensitive)
 - Rebuild the app after adding icons
@@ -619,6 +1541,7 @@ You can customize these channel IDs in the configuration.
 ## Best Practices
 
 1. **Always check availability** before using alarm features:
+
    ```typescript
    if (!isAvailable()) {
      // Handle gracefully
@@ -627,6 +1550,7 @@ You can customize these channel IDs in the configuration.
    ```
 
 2. **Request permission early** in your app flow:
+
    ```typescript
    useEffect(() => {
      requestPermission();
@@ -634,6 +1558,7 @@ You can customize these channel IDs in the configuration.
    ```
 
 3. **Handle errors gracefully**:
+
    ```typescript
    try {
      await scheduleAlarm({...});
@@ -644,20 +1569,64 @@ You can customize these channel IDs in the configuration.
    ```
 
 4. **Refresh alarm list** after scheduling/canceling:
+
    ```typescript
    await scheduleAlarm({...});
    const updated = await getAlarms();
    ```
 
 5. **Configure globally** at app startup for consistent styling:
+
    ```typescript
    useEffect(() => {
      configure({
-       android: { accentColor: '#4CAF50' },
-       ios: { tintColorHex: '#007AFF' },
+       android: { accentColor: "#4CAF50" },
+       ios: { tintColorHex: "#007AFF" },
      });
    }, []);
    ```
+
+6. **Use event listeners** to keep UI in sync with alarm state:
+
+   ```typescript
+   useEffect(() => {
+     const subscription = addAlarmStateChangedListener((state) => {
+       setAlarmState(state);
+     });
+     return () => subscription.remove();
+   }, []);
+   ```
+
+7. **Periodically check states on iOS**:
+   ```typescript
+   useEffect(() => {
+     if (Platform.OS === "ios" && available) {
+       const id = setInterval(async () => {
+         await checkAlarmStates();
+       }, 1000);
+       return () => clearInterval(id);
+     }
+   }, [available]);
+   ```
+
+## Example App
+
+A complete example app is available in the `example` folder. It demonstrates:
+
+- Permission handling for both iOS and Android
+- Alarm scheduling and cancellation
+- Timer functionality
+- Event listeners for real-time updates
+- Configuration management
+- UI components for displaying alarm state
+
+To run the example:
+
+```bash
+cd example
+yarn install
+npx expo start
+```
 
 ## Local Development
 

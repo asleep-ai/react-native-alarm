@@ -62,14 +62,12 @@ class AlarmRingingService : Service() {
         snoozeMinutes = if (intent.hasExtra(EXTRA_STYLE_SNOOZE_MIN)) {
           intent.getIntExtra(EXTRA_STYLE_SNOOZE_MIN, 5)
         } else 5
-        Log.d("RNAlarm", "RingingService ACTION_RING id=$alarmId label=$label showOverlayWhenUnlocked=$showOverlayWhenUnlocked style=$notifStyle overlayBg=$overlayBgColor overlayText=$overlayTextColor btnBg=$overlayBtnBgColor btnText=$overlayBtnTextColor snoozeMin=$snoozeMinutes")
 
         val km = getSystemService(KeyguardManager::class.java)
         val pm = getSystemService(PowerManager::class.java)
         val isLocked = (km?.isKeyguardLocked == true) || (km?.isDeviceLocked == true)
         val isInteractive = pm?.isInteractive == true
         val shouldFullScreen = isLocked || !isInteractive
-        Log.d("RNAlarm", "RingingService deviceState isLocked=$isLocked isInteractive=$isInteractive -> shouldFullScreen=$shouldFullScreen")
 
         val notif = buildForegroundNotification(shouldFullScreen)
         if (Build.VERSION.SDK_INT >= 29) {
@@ -83,6 +81,14 @@ class AlarmRingingService : Service() {
         } catch (_: Throwable) {}
         if (!isRinging) {
           startTone()
+          ReactNativeAlarmModule.sendAlarmStartedEvent(alarmId, label, 0)
+          ReactNativeAlarmModule.sendAlarmStateChangedEvent(
+            id = alarmId,
+            label = label,
+            isRinging = true,
+            isSnoozed = false,
+            remainingSeconds = 0
+          )
         }
         if (shouldFullScreen) {
           // Lock screen or not interactive: show full-screen activity only
@@ -106,7 +112,6 @@ class AlarmRingingService : Service() {
               fs.putExtra(AlarmActivity.EXTRA_OVERLAY_BTN_TEXT, intent.getIntExtra(EXTRA_STYLE_OVERLAY_BTN_TEXT, 0))
             }
             fs.putExtra(AlarmActivity.EXTRA_SNOOZE_MIN, snoozeMinutes)
-            Log.d("RNAlarm", "RingingService startActivity AlarmActivity with bg=$overlayBgColor text=$overlayTextColor")
             startActivity(fs)
           } catch (_: Throwable) {}
         } else {
@@ -132,7 +137,6 @@ class AlarmRingingService : Service() {
                 styleMap["overlayButtonTextColor"] = intent.getIntExtra(EXTRA_STYLE_OVERLAY_BTN_TEXT, 0)
               }
               styleMap["snoozeMinutes"] = snoozeMinutes
-              Log.d("RNAlarm", "RingingService show overlay with styleMap bg=${styleMap["overlayBackgroundColor"]} text=${styleMap["overlayTextColor"]} btnBg=${styleMap["overlayButtonBackgroundColor"]} btnText=${styleMap["overlayButtonTextColor"]}")
               AlarmOverlayService.show(this, alarmId, label, styleMap)
             } else {
               // Fallback to activity if no overlay permission
@@ -153,7 +157,6 @@ class AlarmRingingService : Service() {
                 fs.putExtra(AlarmActivity.EXTRA_OVERLAY_BTN_TEXT, intent.getIntExtra(EXTRA_STYLE_OVERLAY_BTN_TEXT, 0))
               }
               fs.putExtra(AlarmActivity.EXTRA_SNOOZE_MIN, snoozeMinutes)
-              Log.d("RNAlarm", "RingingService fallback AlarmActivity with bg=$overlayBgColor text=$overlayTextColor overlayPerm=${Settings.canDrawOverlays(this)} showOverlayWhenUnlocked=$showOverlayWhenUnlocked")
               startActivity(fs)
             }
           } catch (_: Throwable) {}
@@ -162,7 +165,26 @@ class AlarmRingingService : Service() {
       ACTION_STOP -> {
         stopTone()
         try { AlarmOverlayService.hide(this) } catch (_: Throwable) {}
-        Log.d("RNAlarm", "RingingService ACTION_STOP id=$alarmId")
+        ReactNativeAlarmModule.sendAlarmStoppedEvent(
+          alarmId,
+          label,
+          ReactNativeAlarmModule.currentISO()
+        )
+        ReactNativeAlarmModule.sendAlarmStateChangedEvent(
+          id = alarmId,
+          label = label,
+          isRinging = false,
+          isSnoozed = false,
+          remainingSeconds = 0,
+          stoppedAtISO = ReactNativeAlarmModule.currentISO()
+        )
+        stopSelf()
+      }
+      ACTION_STOP_SILENT -> {
+        // Stop ringing and service without sending onAlarmStopped event
+        // Used when snoozing to avoid resetting the snooze state
+        stopTone()
+        try { AlarmOverlayService.hide(this) } catch (_: Throwable) {}
         stopSelf()
       }
     }
@@ -170,7 +192,6 @@ class AlarmRingingService : Service() {
   }
 
   private fun buildForegroundNotification(fullScreen: Boolean): Notification {
-    Log.d("RNAlarm", "RingingService buildForegroundNotification fullScreen=$fullScreen overlayBg=$overlayBgColor overlayText=$overlayTextColor")
     return NotificationHelper.buildAlarmAlertNotification(
       this,
       alarmId,
@@ -197,7 +218,6 @@ class AlarmRingingService : Service() {
       start()
     }
     isRinging = true
-    Log.d("RNAlarm", "RingingService startTone id=$alarmId")
   }
 
   private fun stopTone() {
@@ -207,7 +227,6 @@ class AlarmRingingService : Service() {
     }
     mediaPlayer = null
     isRinging = false
-    Log.d("RNAlarm", "RingingService stopTone id=$alarmId")
   }
 
   override fun onDestroy() {
@@ -219,6 +238,7 @@ class AlarmRingingService : Service() {
     const val NOTIF_ID = 41502
     const val ACTION_RING = "ai.asleep.reactnative.alarm.action.RING"
     const val ACTION_STOP = "ai.asleep.reactnative.alarm.action.STOP_RING"
+    const val ACTION_STOP_SILENT = "ai.asleep.reactnative.alarm.action.STOP_RING_SILENT"
     const val EXTRA_ID = "extra_id"
     const val EXTRA_LABEL = "extra_label"
     const val EXTRA_STYLE_TIMER_CHANNEL_ID = "style_timer_channel_id"
@@ -239,7 +259,6 @@ class AlarmRingingService : Service() {
         .putExtra(EXTRA_ID, id)
         .putExtra(EXTRA_LABEL, label)
       if (style != null) {
-        Log.d("RNAlarm", "RingingService.start id=$id label=$label style=$style")
         (style["timerChannelId"] as? String)?.let { i.putExtra(EXTRA_STYLE_TIMER_CHANNEL_ID, it) }
         (style["alertChannelId"] as? String)?.let { i.putExtra(EXTRA_STYLE_ALERT_CHANNEL_ID, it) }
         (style["smallIconName"] as? String)?.let { i.putExtra(EXTRA_STYLE_SMALL_ICON, it) }
@@ -267,14 +286,54 @@ class AlarmRingingService : Service() {
 
     fun snooze(context: Context, id: String, label: String?, minutes: Int, style: Map<String, Any?>? = null) {
       try {
-        // Hide any overlay and stop current ringing
+        // Hide any overlay and stop current ringing (but don't send onAlarmStopped event)
         try { AlarmOverlayService.hide(context) } catch (_: Throwable) {}
+        
+        // Stop the ringing service without sending onAlarmStopped event
+        val stopIntent = Intent(context, AlarmRingingService::class.java)
+          .setAction(ACTION_STOP_SILENT)
+        context.startService(stopIntent)
+        
         val triggerAt = System.currentTimeMillis() + minutes * 60_000L
+        val snoozeUntilISO = java.time.Instant.ofEpochMilli(triggerAt).toString()
+        
+        // Update storage with snoozed alarm date
+        val storage = AlarmStorage(context)
+        val alarms = storage.loadAll()
+        val updatedAlarms = alarms.map { alarm ->
+          if (alarm.id == id) {
+            alarm.copy(dateISO = snoozeUntilISO, enabled = true)
+          } else {
+            alarm
+          }
+        }
+        // If alarm not found in storage, add it
+        if (!updatedAlarms.any { it.id == id }) {
+          storage.add(StoredAlarm(id = id, dateISO = snoozeUntilISO, label = label, enabled = true))
+        } else {
+          storage.saveAll(updatedAlarms)
+        }
+        
+        // Start ForegroundTimerService for real-time countdown updates
+        val styleMap = mutableMapOf<String, Any?>()
+        if (style != null) {
+          styleMap.putAll(style)
+        }
+        ForegroundTimerService.start(context, id, label, minutes * 60L, styleMap, isSnoozed = true, snoozeUntilISO = snoozeUntilISO)
+        
+        ReactNativeAlarmModule.sendAlarmSnoozedEvent(id, label, snoozeUntilISO)
+        ReactNativeAlarmModule.sendAlarmStateChangedEvent(
+          id = id,
+          label = label,
+          isRinging = false,
+          isSnoozed = true,
+          remainingSeconds = minutes * 60L,
+          snoozeUntilISO = snoozeUntilISO
+        )
         val fireIntent = Intent(context, AlarmReceiver::class.java)
           .setAction(AlarmReceiver.ACTION_FIRE)
           .putExtra(AlarmReceiver.EXTRA_ID, id)
           .putExtra(AlarmReceiver.EXTRA_LABEL, label)
-        // Persist style for next ring
         if (style != null) {
           (style["timerChannelId"] as? String)?.let { fireIntent.putExtra(EXTRA_STYLE_TIMER_CHANNEL_ID, it) }
           (style["alertChannelId"] as? String)?.let { fireIntent.putExtra(EXTRA_STYLE_ALERT_CHANNEL_ID, it) }
@@ -301,12 +360,11 @@ class AlarmRingingService : Service() {
         } catch (_: SecurityException) {
           am.set(android.app.AlarmManager.RTC_WAKEUP, triggerAt, pi)
         }
-        // Show info notification for snoozed time
         NotificationHelper.showCountdownInfoNotification(
           context, id, label, triggerAt, NotificationHelper.Style()
         )
-      } finally {
-        // Stop current ringing service
+      } catch (e: Exception) {
+        // Fallback: still stop the service even if something fails
         stop(context)
       }
     }

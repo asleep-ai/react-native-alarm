@@ -28,6 +28,7 @@ declare class ReactNativeAlarmModule extends NativeModule<ReactNativeAlarmEvents
   cancelAlarm(id: string): Promise<void>;
   cancelAll(): Promise<void>;
   getAlarms(): Promise<Alarm[]>;
+  checkAlarmStates(): Promise<void>;
 }
 
 // This loads the native module object from the JSI.

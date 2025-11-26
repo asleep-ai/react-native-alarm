@@ -1,7 +1,8 @@
 import ReactNativeAlarmModule from "./ReactNativeAlarmModule";
 export * from "./ReactNativeAlarm.types";
-import type { Alarm, ScheduleAlarmOptions } from "./ReactNativeAlarm.types";
+import type { Alarm, ScheduleAlarmOptions, AlarmState, ReactNativeAlarmEvents } from "./ReactNativeAlarm.types";
 import type { ReactNativeAlarmConfig } from "./ReactNativeAlarm.types";
+import { EventEmitter } from "expo-modules-core";
 
 export function isAvailable(): boolean {
   return ReactNativeAlarmModule.isAlarmKitAvailable();
@@ -88,4 +89,53 @@ export async function cancelAll(): Promise<void> {
 
 export async function getAlarms(): Promise<Alarm[]> {
   return ReactNativeAlarmModule.getAlarms();
+}
+
+export async function checkAlarmStates(): Promise<void> {
+  return ReactNativeAlarmModule.checkAlarmStates();
+}
+
+// Event listeners
+const emitter = new EventEmitter<ReactNativeAlarmEvents>(ReactNativeAlarmModule);
+
+// Subscription type for event listeners
+export type Subscription = {
+  remove: () => void;
+};
+
+export function addAlarmStartedListener(
+  listener: (event: { id: string; label?: string; remainingSeconds: number }) => void
+): Subscription {
+  return emitter.addListener("onAlarmStarted", listener);
+}
+
+export function addAlarmSnoozedListener(
+  listener: (event: { id: string; label?: string; snoozeUntilISO: string }) => void
+): Subscription {
+  return emitter.addListener("onAlarmSnoozed", listener);
+}
+
+export function addAlarmStoppedListener(
+  listener: (event: { id: string; label?: string; stoppedAtISO: string }) => void
+): Subscription {
+  return emitter.addListener("onAlarmStopped", listener);
+}
+
+export function addAlarmStateChangedListener(
+  listener: (event: AlarmState) => void
+): Subscription {
+  return emitter.addListener("onAlarmStateChanged", listener);
+}
+
+export function removeAllListeners(eventName?: keyof ReactNativeAlarmEvents): void {
+  if (eventName) {
+    emitter.removeAllListeners(eventName);
+  } else {
+    // Remove all event listeners
+    emitter.removeAllListeners("onAlarmFired");
+    emitter.removeAllListeners("onAlarmStarted");
+    emitter.removeAllListeners("onAlarmSnoozed");
+    emitter.removeAllListeners("onAlarmStopped");
+    emitter.removeAllListeners("onAlarmStateChanged");
+  }
 }

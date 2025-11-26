@@ -19,10 +19,75 @@ import java.time.format.DateTimeParseException
 import java.util.UUID
 
 class ReactNativeAlarmModule : Module() {
+  companion object {
+    @Volatile
+    private var instance: ReactNativeAlarmModule? = null
+
+    fun getInstance(): ReactNativeAlarmModule? = instance
+
+    fun sendAlarmStartedEvent(id: String, label: String?, remainingSeconds: Long) {
+      instance?.sendEvent("onAlarmStarted", mapOf(
+        "id" to id,
+        "label" to (label ?: ""),
+        "remainingSeconds" to remainingSeconds
+      ))
+    }
+
+    fun sendAlarmSnoozedEvent(id: String, label: String?, snoozeUntilISO: String) {
+      instance?.sendEvent("onAlarmSnoozed", mapOf(
+        "id" to id,
+        "label" to (label ?: ""),
+        "snoozeUntilISO" to snoozeUntilISO
+      ))
+    }
+
+    fun sendAlarmStoppedEvent(id: String, label: String?, stoppedAtISO: String) {
+      instance?.sendEvent("onAlarmStopped", mapOf(
+        "id" to id,
+        "label" to (label ?: ""),
+        "stoppedAtISO" to stoppedAtISO
+      ))
+    }
+
+    fun sendAlarmStateChangedEvent(
+      id: String,
+      label: String?,
+      isRinging: Boolean,
+      isSnoozed: Boolean,
+      remainingSeconds: Long,
+      stoppedAtISO: String? = null,
+      snoozeUntilISO: String? = null
+    ) {
+      val eventMap = mutableMapOf<String, Any?>(
+        "id" to id,
+        "label" to (label ?: ""),
+        "isRinging" to isRinging,
+        "isSnoozed" to isSnoozed,
+        "remainingSeconds" to remainingSeconds
+      )
+      stoppedAtISO?.let { eventMap["stoppedAtISO"] = it }
+      snoozeUntilISO?.let { eventMap["snoozeUntilISO"] = it }
+      instance?.sendEvent("onAlarmStateChanged", eventMap)
+    }
+
+    @JvmStatic
+    fun currentISO(): String {
+      return Instant.now().toString()
+    }
+  }
+
   override fun definition() = ModuleDefinition {
     Name("ReactNativeAlarm")
 
-    Events("onAlarmFired")
+    Events("onAlarmFired", "onAlarmStarted", "onAlarmSnoozed", "onAlarmStopped", "onAlarmStateChanged")
+
+    OnCreate {
+      instance = this@ReactNativeAlarmModule
+    }
+
+    OnDestroy {
+      instance = null
+    }
 
     // ----- Configuration
     // Accept two arguments to avoid object->Map bridge issues.
@@ -30,7 +95,6 @@ class ReactNativeAlarmModule : Module() {
       if (android != null) {
         @Suppress("UNCHECKED_CAST")
         ConfigHolder.updateFromMap(android as Map<String, Any?>)
-        Log.d("RNAlarm", "Module setConfig android=$android")
       }
     }
 
@@ -185,9 +249,7 @@ class ReactNativeAlarmModule : Module() {
 
       val id = UUID.randomUUID().toString()
       var outISO = ""
-      Log.d("RNAlarm", "Module scheduleAlarm id=$id label=$label dateISO=$dateISO seconds=$countdownSeconds style=$style")
 
-      // Timer (countdown) via foreground service
       if (countdownSeconds != null) {
         ForegroundTimerService.start(ctx, id, label, countdownSeconds, styleToMap(style))
         outISO = isoAfterSeconds(countdownSeconds)
@@ -199,14 +261,32 @@ class ReactNativeAlarmModule : Module() {
         if (triggerAt != null && triggerAt > System.currentTimeMillis()) {
           scheduleExactAlarm(ctx, id, label, triggerAt)
           outISO = dateISO
-          // Show live countdown notification without FGS (chronometer-based)
           NotificationHelper.showCountdownInfoNotification(ctx, id, label, triggerAt, styleToNotifStyle(style))
         }
       }
 
-      // Mirror in storage
       val storage = AlarmStorage(ctx)
       storage.add(StoredAlarm(id = id, dateISO = outISO, label = label, enabled = true))
+
+      val remainingSeconds = when {
+        countdownSeconds != null -> countdownSeconds
+        dateISO != null -> {
+          val triggerAt = parseIsoToEpochMillis(dateISO)
+          if (triggerAt != null && triggerAt > System.currentTimeMillis()) {
+            (triggerAt - System.currentTimeMillis()) / 1000
+          } else 0
+        }
+        else -> 0
+      }
+
+      sendAlarmStartedEvent(id, label, remainingSeconds)
+      sendAlarmStateChangedEvent(
+        id = id,
+        label = label,
+        isRinging = false,
+        isSnoozed = false,
+        remainingSeconds = remainingSeconds
+      )
 
       mapOf(
         "id" to id,
@@ -220,13 +300,25 @@ class ReactNativeAlarmModule : Module() {
       if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
         val ctx = appContext.reactContext
         if (ctx != null) {
+          val storage = AlarmStorage(ctx)
+          val alarm = storage.loadAll().find { it.id == id }
           cancelExactAlarm(ctx, id)
-          // Stop timer service if running (best-effort)
           val stopIntent = Intent(ctx, ForegroundTimerService::class.java)
             .setAction(ForegroundTimerService.ACTION_STOP)
             .putExtra(ForegroundTimerService.EXTRA_ID, id)
           ctx.startService(stopIntent)
-          AlarmStorage(ctx).removeById(id)
+          storage.removeById(id)
+          
+          val stoppedAtISO = currentISO()
+          sendAlarmStoppedEvent(id, alarm?.label, stoppedAtISO)
+          sendAlarmStateChangedEvent(
+            id = id,
+            label = alarm?.label,
+            isRinging = false,
+            isSnoozed = false,
+            remainingSeconds = 0,
+            stoppedAtISO = stoppedAtISO
+          )
         }
       }
     }
@@ -238,7 +330,6 @@ class ReactNativeAlarmModule : Module() {
           val storage = AlarmStorage(ctx)
           val all = storage.loadAll()
           all.forEach { a -> cancelExactAlarm(ctx, a.id) }
-          // Stop running service
           val stopIntent = Intent(ctx, ForegroundTimerService::class.java)
             .setAction(ForegroundTimerService.ACTION_STOP)
           ctx.startService(stopIntent)
@@ -253,16 +344,353 @@ class ReactNativeAlarmModule : Module() {
         return@AsyncFunction emptyList<Map<String, Any>>()
       }
       val storage = AlarmStorage(ctx)
-      storage.loadAll().map { a ->
-        mapOf(
+      val alarms = storage.loadAll()
+      val stateInfo = calculateAlarmStates(ctx, alarms)
+      checkAndSendAlarmStateEvents(ctx, alarms)
+      alarms.map { a ->
+        val state = stateInfo[a.id]
+        val resultMap = mutableMapOf<String, Any>(
           "id" to a.id,
           "dateISO" to a.dateISO,
           "label" to (a.label ?: ""),
           "enabled" to a.enabled
         )
+        state?.let {
+          resultMap["isRinging"] = it.isRinging
+          resultMap["isSnoozed"] = it.isSnoozed
+          resultMap["remainingSeconds"] = it.remainingSeconds
+          it.snoozeUntilISO?.let { snoozeUntil -> resultMap["snoozeUntilISO"] = snoozeUntil }
+        }
+        resultMap
       }
     }
+
+    AsyncFunction("getAuthorizationStatus") {
+      if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+        return@AsyncFunction "notAvailable"
+      }
+      val ctx = appContext.reactContext ?: return@AsyncFunction "unknown"
+      val enabled = NotificationManagerCompat.from(ctx).areNotificationsEnabled()
+      if (enabled) "authorized" else "denied"
+    }
+
+    AsyncFunction("openSettings") {
+      val ctx = appContext.reactContext ?: return@AsyncFunction Unit
+      val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+        data = Uri.parse("package:${ctx.packageName}")
+        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+      }
+      try {
+        ctx.startActivity(intent)
+      } catch (_: Exception) {}
+    }
+
+    AsyncFunction("checkAlarmStates") {
+      val ctx = appContext.reactContext ?: return@AsyncFunction Unit
+      if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+        return@AsyncFunction Unit
+      }
+      val storage = AlarmStorage(ctx)
+      val alarms = storage.loadAll()
+      checkAndSendAlarmStateEvents(ctx, alarms)
+    }
   }
+
+  private data class AlarmStateInfo(
+    val isRinging: Boolean,
+    val isSnoozed: Boolean,
+    val remainingSeconds: Long,
+    val snoozeUntilISO: String?
+  )
+
+  private fun calculateAlarmStates(context: Context, alarms: List<StoredAlarm>): Map<String, AlarmStateInfo> {
+    val prefs = context.getSharedPreferences("react_native_alarm", Context.MODE_PRIVATE)
+    val lastIsSnoozedJson = prefs.getString("ReactNativeAlarm.lastIsSnoozed", "{}")
+    val lastIsRingingJson = prefs.getString("ReactNativeAlarm.lastIsRinging", "{}")
+    val lastRemainingJson = prefs.getString("ReactNativeAlarm.lastRemaining", "{}")
+    val lastScheduleDatesJson = prefs.getString("ReactNativeAlarm.lastScheduleDates", "{}")
+
+    val lastIsSnoozed = parseJsonBooleanMap(lastIsSnoozedJson ?: "{}")
+    val lastIsRinging = parseJsonBooleanMap(lastIsRingingJson ?: "{}")
+    val lastRemaining = parseJsonLongMap(lastRemainingJson ?: "{}")
+    val lastScheduleDates = parseJsonMap(lastScheduleDatesJson ?: "{}")
+
+    val stateMap = mutableMapOf<String, AlarmStateInfo>()
+
+    for (alarm in alarms) {
+      val id = alarm.id
+      // If alarm is disabled, it's stopped
+      if (!alarm.enabled) {
+        stateMap[id] = AlarmStateInfo(
+          isRinging = false,
+          isSnoozed = false,
+          remainingSeconds = 0,
+          snoozeUntilISO = null
+        )
+        continue
+      }
+      
+      val remaining = calculateRemainingSeconds(context, alarm)
+      val isRinging = remaining <= 1 && alarm.enabled
+      val isSnoozed = checkIfSnoozed(
+        context,
+        alarm,
+        lastIsSnoozed[id] ?: false,
+        lastIsRinging[id] ?: false,
+        lastRemaining[id] ?: Long.MAX_VALUE,
+        lastScheduleDates[id] ?: ""
+      )
+      val snoozeUntilISO = if (isSnoozed) alarm.dateISO else null
+      
+      stateMap[id] = AlarmStateInfo(
+        isRinging = isRinging,
+        isSnoozed = isSnoozed,
+        remainingSeconds = remaining,
+        snoozeUntilISO = snoozeUntilISO
+      )
+    }
+
+    return stateMap
+  }
+
+  private fun checkAndSendAlarmStateEvents(context: Context, alarms: List<StoredAlarm>) {
+    val prefs = context.getSharedPreferences("react_native_alarm", Context.MODE_PRIVATE)
+    val lastStatesJson = prefs.getString("ReactNativeAlarm.lastStates", "{}")
+    val lastRemainingJson = prefs.getString("ReactNativeAlarm.lastRemaining", "{}")
+    val lastIsRingingJson = prefs.getString("ReactNativeAlarm.lastIsRinging", "{}")
+    val lastIsSnoozedJson = prefs.getString("ReactNativeAlarm.lastIsSnoozed", "{}")
+    val lastScheduleDatesJson = prefs.getString("ReactNativeAlarm.lastScheduleDates", "{}")
+
+    val lastStates = parseJsonMap(lastStatesJson ?: "{}")
+    val lastRemaining = parseJsonLongMap(lastRemainingJson ?: "{}")
+    val lastIsRinging = parseJsonBooleanMap(lastIsRingingJson ?: "{}")
+    val lastIsSnoozed = parseJsonBooleanMap(lastIsSnoozedJson ?: "{}")
+    val lastScheduleDates = parseJsonMap(lastScheduleDatesJson ?: "{}")
+
+    val newStates = mutableMapOf<String, String>()
+    val newRemaining = mutableMapOf<String, Long>()
+    val newIsRinging = mutableMapOf<String, Boolean>()
+    val newIsSnoozed = mutableMapOf<String, Boolean>()
+    val newScheduleDates = mutableMapOf<String, String>()
+
+    val currentAlarmIds = alarms.map { it.id }.toSet()
+
+    // Check for stopped alarms
+    for ((id, _) in lastStates) {
+      if (!currentAlarmIds.contains(id)) {
+        if (lastIsRinging[id] == true || lastIsSnoozed[id] == true) {
+          val alarm = alarms.find { it.id == id }
+          val stoppedAtISO = currentISO()
+          sendAlarmStoppedEvent(id, alarm?.label, stoppedAtISO)
+          sendAlarmStateChangedEvent(
+            id = id,
+            label = alarm?.label,
+            isRinging = false,
+            isSnoozed = false,
+            remainingSeconds = 0,
+            stoppedAtISO = stoppedAtISO
+          )
+        }
+      }
+    }
+
+    for (alarm in alarms) {
+      val id = alarm.id
+      val remaining = calculateRemainingSeconds(context, alarm)
+      val isRinging = remaining <= 1 && alarm.enabled
+      val isSnoozed = checkIfSnoozed(context, alarm, lastIsSnoozed[id] ?: false, lastIsRinging[id] ?: false, lastRemaining[id] ?: Long.MAX_VALUE, lastScheduleDates[id] ?: "")
+
+      newStates[id] = if (isRinging) "ringing" else if (isSnoozed) "snoozed" else if (alarm.enabled) "scheduled" else "paused"
+      newRemaining[id] = remaining
+      newIsRinging[id] = isRinging
+      newIsSnoozed[id] = isSnoozed
+      newScheduleDates[id] = alarm.dateISO
+
+      val wasRinging = lastIsRinging[id] ?: false
+      val wasSnoozed = lastIsSnoozed[id] ?: false
+      val lastRemainingValue = lastRemaining[id] ?: Long.MAX_VALUE
+
+      // Send events for state changes
+      if (isSnoozed && !wasSnoozed) {
+        val snoozeUntilISO = alarm.dateISO
+        sendAlarmSnoozedEvent(id, alarm.label, snoozeUntilISO)
+        sendAlarmStateChangedEvent(
+          id = id,
+          label = alarm.label,
+          isRinging = false,
+          isSnoozed = true,
+          remainingSeconds = remaining,
+          snoozeUntilISO = snoozeUntilISO
+        )
+      } else if (!isSnoozed && wasSnoozed) {
+        // Snooze was cancelled (e.g., from system UI or another app)
+        sendAlarmStateChangedEvent(
+          id = id,
+          label = alarm.label,
+          isRinging = isRinging,
+          isSnoozed = false,
+          remainingSeconds = remaining
+        )
+      } else if (isSnoozed && wasSnoozed && abs(remaining - lastRemainingValue) >= 1) {
+        // Update remaining time for snoozed alarm
+        sendAlarmStateChangedEvent(
+          id = id,
+          label = alarm.label,
+          isRinging = false,
+          isSnoozed = true,
+          remainingSeconds = remaining,
+          snoozeUntilISO = alarm.dateISO
+        )
+      } else if (isRinging && !wasRinging && !isSnoozed) {
+        sendAlarmStartedEvent(id, alarm.label, 0)
+        sendAlarmStateChangedEvent(
+          id = id,
+          label = alarm.label,
+          isRinging = true,
+          isSnoozed = false,
+          remainingSeconds = 0
+        )
+      } else if (remaining > 0 && !isRinging && !isSnoozed && abs(remaining - lastRemainingValue) >= 1) {
+        sendAlarmStateChangedEvent(
+          id = id,
+          label = alarm.label,
+          isRinging = false,
+          isSnoozed = false,
+          remainingSeconds = remaining
+        )
+      }
+    }
+
+    // Save current states
+    prefs.edit()
+      .putString("ReactNativeAlarm.lastStates", mapToJson(newStates))
+      .putString("ReactNativeAlarm.lastRemaining", longMapToJson(newRemaining))
+      .putString("ReactNativeAlarm.lastIsRinging", booleanMapToJson(newIsRinging))
+      .putString("ReactNativeAlarm.lastIsSnoozed", booleanMapToJson(newIsSnoozed))
+      .putString("ReactNativeAlarm.lastScheduleDates", mapToJson(newScheduleDates))
+      .apply()
+  }
+
+  private fun calculateRemainingSeconds(context: Context, alarm: StoredAlarm): Long {
+    if (!alarm.enabled) return 0
+    return try {
+      val triggerAt = Instant.parse(alarm.dateISO).toEpochMilli()
+      val now = System.currentTimeMillis()
+      maxOf(0, (triggerAt - now) / 1000)
+    } catch (e: Exception) {
+      0
+    }
+  }
+
+  private fun checkIfSnoozed(
+    context: Context,
+    alarm: StoredAlarm,
+    wasSnoozed: Boolean,
+    wasRinging: Boolean,
+    lastRemaining: Long,
+    lastScheduleDate: String
+  ): Boolean {
+    if (!alarm.enabled || alarm.dateISO.isEmpty()) {
+      return false
+    }
+    
+    // If was snoozed and date changed, still snoozed
+    if (wasSnoozed && alarm.dateISO != lastScheduleDate) {
+      return try {
+        val currentDate = Instant.parse(alarm.dateISO).toEpochMilli()
+        val now = System.currentTimeMillis()
+        // Still snoozed if the date is in the future
+        currentDate > now
+      } catch (e: Exception) {
+        false
+      }
+    }
+    
+    // If was ringing and date changed to future, it's snoozed
+    if (wasRinging && alarm.dateISO != lastScheduleDate && !alarm.dateISO.isEmpty()) {
+      return try {
+        val currentDate = Instant.parse(alarm.dateISO).toEpochMilli()
+        val lastDate = if (lastScheduleDate.isNotEmpty()) Instant.parse(lastScheduleDate).toEpochMilli() else 0
+        val now = System.currentTimeMillis()
+        // Snoozed if the new date is in the future and later than the last date
+        currentDate > now && currentDate > lastDate
+      } catch (e: Exception) {
+        false
+      }
+    }
+    
+    // If was snoozed and date hasn't changed, check if still in future
+    if (wasSnoozed && alarm.dateISO == lastScheduleDate) {
+      return try {
+        val currentDate = Instant.parse(alarm.dateISO).toEpochMilli()
+        val now = System.currentTimeMillis()
+        currentDate > now
+      } catch (e: Exception) {
+        false
+      }
+    }
+    
+    return false
+  }
+
+  private fun parseJsonMap(json: String): Map<String, String> {
+    return try {
+      val jsonObject = org.json.JSONObject(json)
+      jsonObject.keys().asSequence().associateWith { jsonObject.getString(it) }
+    } catch (e: Exception) {
+      emptyMap()
+    }
+  }
+
+  private fun parseJsonLongMap(json: String): Map<String, Long> {
+    return try {
+      val jsonObject = org.json.JSONObject(json)
+      jsonObject.keys().asSequence().associateWith { jsonObject.getLong(it) }
+    } catch (e: Exception) {
+      emptyMap()
+    }
+  }
+
+  private fun parseJsonBooleanMap(json: String): Map<String, Boolean> {
+    return try {
+      val jsonObject = org.json.JSONObject(json)
+      jsonObject.keys().asSequence().associateWith { jsonObject.getBoolean(it) }
+    } catch (e: Exception) {
+      emptyMap()
+    }
+  }
+
+  private fun mapToJson(map: Map<String, String>): String {
+    return try {
+      val jsonObject = org.json.JSONObject()
+      map.forEach { (k, v) -> jsonObject.put(k, v) }
+      jsonObject.toString()
+    } catch (e: Exception) {
+      "{}"
+    }
+  }
+
+  private fun longMapToJson(map: Map<String, Long>): String {
+    return try {
+      val jsonObject = org.json.JSONObject()
+      map.forEach { (k, v) -> jsonObject.put(k, v) }
+      jsonObject.toString()
+    } catch (e: Exception) {
+      "{}"
+    }
+  }
+
+  private fun booleanMapToJson(map: Map<String, Boolean>): String {
+    return try {
+      val jsonObject = org.json.JSONObject()
+      map.forEach { (k, v) -> jsonObject.put(k, v) }
+      jsonObject.toString()
+    } catch (e: Exception) {
+      "{}"
+    }
+  }
+
+  private fun abs(value: Long): Long = if (value < 0) -value else value
 
   private fun parseIsoToEpochMillis(iso: String): Long? {
     return try {

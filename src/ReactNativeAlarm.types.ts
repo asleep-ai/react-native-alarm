@@ -5,6 +5,11 @@ export type Alarm = {
   dateISO: string; // ISO 8601 date string
   label?: string;
   enabled: boolean;
+  // State information (optional, may not be present in all contexts)
+  isRinging?: boolean;
+  isSnoozed?: boolean;
+  remainingSeconds?: number;
+  snoozeUntilISO?: string;
 };
 
 export type ScheduleAlarmOptions = {
@@ -25,8 +30,34 @@ export type ScheduleAlarmOptions = {
   ios?: IOSAlarmStyle;
 };
 
+export type AlarmState = {
+  id: AlarmId;
+  label?: string;
+  isRinging: boolean; // 현재 알람이 울리고 있는지
+  isSnoozed: boolean; // 현재 스누즈 중인지
+  remainingSeconds: number; // 남은 시간 (초)
+  stoppedAtISO?: string; // 알람이 정지된 시간 (ISO 8601)
+  snoozeUntilISO?: string; // 스누즈가 끝나는 시간 (ISO 8601)
+};
+
 export type ReactNativeAlarmEvents = {
   onAlarmFired: (event: { id: AlarmId }) => void;
+  onAlarmStarted: (event: {
+    id: AlarmId;
+    label?: string;
+    remainingSeconds: number;
+  }) => void;
+  onAlarmSnoozed: (event: {
+    id: AlarmId;
+    label?: string;
+    snoozeUntilISO: string;
+  }) => void;
+  onAlarmStopped: (event: {
+    id: AlarmId;
+    label?: string;
+    stoppedAtISO: string;
+  }) => void;
+  onAlarmStateChanged: (event: AlarmState) => void;
 };
 
 // ---- Customization types
@@ -50,6 +81,7 @@ export type IOSAlarmStyle = {
   alertStopText?: string; // default 'Done'
   countdownPauseText?: string; // default 'Pause'
   pausedResumeText?: string; // default 'Start'
+  snoozeMinutes?: number; // default 5 - snooze duration in minutes
 };
 
 export type ReactNativeAlarmConfig = {

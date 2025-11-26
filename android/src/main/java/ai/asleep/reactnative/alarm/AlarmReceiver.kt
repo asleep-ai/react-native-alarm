@@ -64,9 +64,7 @@ class AlarmReceiver : BroadcastReceiver() {
             styleMap.putAll(styleToMap(ConfigHolder.globalStyle))
           } catch (_: Throwable) {}
         }
-        Log.d("RNAlarm", "AlarmReceiver ACTION_FIRE id=$id label=$label style=$styleMap (fromExtras=$hasStyleExtras)")
         AlarmRingingService.start(context, id, label, styleMap)
-        // Storage mark enabled=false
         val storage = AlarmStorage(context)
         val items = storage.loadAll().map {
           if (it.id == id) it.copy(enabled = false) else it
@@ -74,7 +72,6 @@ class AlarmReceiver : BroadcastReceiver() {
         storage.saveAll(items)
       }
       ACTION_DISMISS -> {
-        // Dismiss alert notification
         val mgr = context.getSystemService(android.app.NotificationManager::class.java)
         mgr.cancel(id.hashCode())
       }

@@ -112,6 +112,17 @@ class AlarmActivity : Activity() {
       if (it.id == alarmId) it.copy(enabled = false) else it
     }
     storage.saveAll(items)
+    // Send alarm stopped event (already sent by AlarmRingingService.stop, but ensure it's sent)
+    val stoppedAtISO = ReactNativeAlarmModule.currentISO()
+    ReactNativeAlarmModule.sendAlarmStoppedEvent(alarmId, label, stoppedAtISO)
+    ReactNativeAlarmModule.sendAlarmStateChangedEvent(
+      id = alarmId,
+      label = label,
+      isRinging = false,
+      isSnoozed = false,
+      remainingSeconds = 0,
+      stoppedAtISO = stoppedAtISO
+    )
     finish()
   }
 
