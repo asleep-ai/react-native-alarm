@@ -2,6 +2,8 @@ name: Publish to npm
 
 on:
   push:
+    branches:
+      - main
     tags:
       - "v*.*.*" # Auto-deploy on tag push
   workflow_dispatch:
@@ -27,7 +29,18 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          ref: main # Only deploy from main branch
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Check if version bump commit
+        id: check_commit
+        run: |
+          COMMIT_MSG=$(git log -1 --pretty=%B)
+          if echo "$COMMIT_MSG" | grep -qE "chore: bump version|\[skip ci\]|\[skip version\]"; then
+            echo "skip_version_bump=true" >> $GITHUB_OUTPUT
+            echo "Skipping version bump - this is a version bump commit"
+          else
+            echo "skip_version_bump=false" >> $GITHUB_OUTPUT
+          fi
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -43,6 +56,40 @@ jobs:
 
       - name: Run typecheck
         run: npm run typecheck
+
+      - name: Auto bump patch version on main push
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.check_commit.outputs.skip_version_bump == 'false'
+        id: auto_version
+        run: |
+          CURRENT_VERSION=$(node -p "require('./package.json').version")
+          
+          # Parse version
+          IFS='.' read -r -a VERSION_PARTS <<< "$CURRENT_VERSION"
+          MAJOR=${VERSION_PARTS[0]}
+          MINOR=${VERSION_PARTS[1]}
+          PATCH=${VERSION_PARTS[2]}
+          
+          # Increment patch version
+          PATCH=$((PATCH + 1))
+          NEW_VERSION="$MAJOR.$MINOR.$PATCH"
+          
+          echo "current_version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+          echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "tag=v$NEW_VERSION" >> $GITHUB_OUTPUT
+          
+          # Update package.json
+          npm version $NEW_VERSION --no-git-tag-version
+          
+          echo "Version bumped from $CURRENT_VERSION to $NEW_VERSION"
+
+      - name: Commit and push version bump
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.check_commit.outputs.skip_version_bump == 'false'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add package.json
+          git commit -m "chore: bump version to ${{ steps.auto_version.outputs.new_version }} [skip ci]"
+          git push origin main
 
       - name: Determine version
         id: version
@@ -95,7 +142,16 @@ jobs:
           VERSION=${GITHUB_REF#refs/tags/v}
           echo "version=$VERSION" >> $GITHUB_ENV
 
+      - name: Extract version for main push
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.check_commit.outputs.skip_version_bump == 'false'
+        run: |
+          VERSION=${{ steps.auto_version.outputs.new_version }}
+          echo "version=$VERSION" >> $GITHUB_ENV
+
       - name: Publish to npm
+        if: |
+          (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')) ||
+          (github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.check_commit.outputs.skip_version_bump == 'false')
         run: npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
