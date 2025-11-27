@@ -11,7 +11,6 @@ import android.media.RingtoneManager
 import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
-import android.app.TaskStackBuilder
 import java.text.DateFormat
 import java.util.Date
 import android.util.Log
@@ -173,13 +172,15 @@ internal object NotificationHelper {
       // Pass overlay theming to activity if available
       overlayBgColor?.let { putExtra(AlarmActivity.EXTRA_OVERLAY_BG, it) }
       overlayTextColor?.let { putExtra(AlarmActivity.EXTRA_OVERLAY_TEXT, it) }
+      // AlarmActivity should run independently without parent stack
+      addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
     }
     Log.d("RNAlarm", "NotificationHelper buildAlarmAlertNotification id=$id fullScreen=$fullScreen bg=$overlayBgColor text=$overlayTextColor")
-    val stack = TaskStackBuilder.create(context).apply {
-      addNextIntentWithParentStack(fsIntent)
-    }
-    val fsPi = stack.getPendingIntent(
+    // Use direct PendingIntent instead of TaskStackBuilder to avoid parent stack conflicts
+    val fsPi = PendingIntent.getActivity(
+      context,
       (id + ":fs").hashCode(),
+      fsIntent,
       PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
     )
 
@@ -234,12 +235,14 @@ internal object NotificationHelper {
     val fsIntent = Intent(context, AlarmActivity::class.java).apply {
       putExtra(AlarmReceiver.EXTRA_ID, id)
       putExtra(AlarmReceiver.EXTRA_LABEL, label)
+      // AlarmActivity should run independently without parent stack
+      addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
     }
-    val stack = TaskStackBuilder.create(context).apply {
-      addNextIntentWithParentStack(fsIntent)
-    }
-    val pi = stack.getPendingIntent(
+    // Use direct PendingIntent instead of TaskStackBuilder to avoid parent stack conflicts
+    val pi = PendingIntent.getActivity(
+      context,
       (id + ":info").hashCode(),
+      fsIntent,
       PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
     )
 

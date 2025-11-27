@@ -49,3 +49,4 @@ export function useAlarmListeners({
 
   return { eventLog };
 }
+

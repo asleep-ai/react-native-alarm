@@ -19,7 +19,9 @@
       android:showOnLockScreen="true"
       android:turnScreenOn="true"
       android:excludeFromRecents="true"
-      android:launchMode="singleTop" />
+      android:launchMode="singleTop"
+      android:taskAffinity=""
+      android:finishOnTaskLaunch="true" />
 
     <service
       android:name=".ForegroundTimerService"

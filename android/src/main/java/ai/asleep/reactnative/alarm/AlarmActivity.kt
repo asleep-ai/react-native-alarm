@@ -113,16 +113,21 @@ class AlarmActivity : Activity() {
     }
     storage.saveAll(items)
     // Send alarm stopped event (already sent by AlarmRingingService.stop, but ensure it's sent)
-    val stoppedAtISO = ReactNativeAlarmModule.currentISO()
-    ReactNativeAlarmModule.sendAlarmStoppedEvent(alarmId, label, stoppedAtISO)
-    ReactNativeAlarmModule.sendAlarmStateChangedEvent(
-      id = alarmId,
-      label = label,
-      isRinging = false,
-      isSnoozed = false,
-      remainingSeconds = 0,
-      stoppedAtISO = stoppedAtISO
-    )
+    // Wrap in try-catch to avoid issues if React Native bridge is not initialized
+    try {
+      val stoppedAtISO = ReactNativeAlarmModule.currentISO()
+      ReactNativeAlarmModule.sendAlarmStoppedEvent(alarmId, label, stoppedAtISO)
+      ReactNativeAlarmModule.sendAlarmStateChangedEvent(
+        id = alarmId,
+        label = label,
+        isRinging = false,
+        isSnoozed = false,
+        remainingSeconds = 0,
+        stoppedAtISO = stoppedAtISO
+      )
+    } catch (e: Exception) {
+      Log.w("RNAlarm", "Failed to send alarm stopped event: ${e.message}")
+    }
     finish()
   }
 
