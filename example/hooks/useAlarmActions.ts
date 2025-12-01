@@ -107,6 +107,53 @@ export function useAlarmActions({ config }: UseAlarmActionsProps) {
     [config, refresh]
   );
 
+  const onScheduleAtTime = useCallback(
+    async (hour: number, minute: number) => {
+      try {
+        const now = new Date();
+        const targetDate = new Date();
+        targetDate.setHours(hour, minute, 0, 0);
+
+        // If the time has passed today, schedule for tomorrow
+        if (targetDate <= now) {
+          targetDate.setDate(targetDate.getDate() + 1);
+        }
+
+        const dateISO = targetDate.toISOString();
+        const timeStr = `${hour.toString().padStart(2, "0")}:${minute.toString().padStart(2, "0")}`;
+        const a = await scheduleAlarm({
+          dateISO,
+          label: `Alarm ${timeStr}`,
+          android:
+            Platform.OS === "android"
+              ? {
+                  smallIconName: config.androidSmallIcon || undefined,
+                  accentColor: config.androidAccentColor,
+                  useChronometer: config.androidUseChrono,
+                  showOverlayWhenUnlocked: config.androidOverlayUnlocked,
+                  overlayBackgroundColor: config.androidOverlayBg,
+                  overlayTextColor: config.androidOverlayText,
+                  overlayButtonBackgroundColor: config.androidOverlayBtnBg,
+                  overlayButtonTextColor: config.androidOverlayBtnText,
+                  snoozeMinutes: 3,
+                }
+              : undefined,
+          ios:
+            Platform.OS === "ios"
+              ? {
+                  snoozeMinutes: 3,
+                }
+              : undefined,
+        });
+        setLastScheduled(a);
+        await refresh();
+      } catch (e: any) {
+        Alert.alert("Error", String(e?.message ?? e));
+      }
+    },
+    [config, refresh]
+  );
+
   const onCancelLast = useCallback(async () => {
     try {
       const target = lastScheduled ?? alarms[alarms.length - 1];
@@ -151,6 +198,7 @@ export function useAlarmActions({ config }: UseAlarmActionsProps) {
     refreshAlarms: refresh,
     onScheduleIn,
     onStartTimer,
+    onScheduleAtTime,
     onCancelLast,
     onCancelAlarm,
     onCancelAll,

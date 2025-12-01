@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import {
   ScrollView,
   Text,
@@ -6,18 +6,19 @@ import {
   Button,
   StyleSheet,
   Platform,
+  TextInput,
 } from "react-native";
 import { Group } from "../components/Group";
 import { AlarmStateView } from "../components/AlarmStateView";
 import { AlarmCard } from "../components/AlarmCard";
-import type { AlarmState } from "@asleep-ai/react-native-alarm";
+import type { AlarmState, Alarm } from "@asleep-ai/react-native-alarm";
 
 interface ActionsScreenProps {
   alarmState: AlarmState | null;
   alarmHistory: AlarmState | null;
-  alarms: any[];
+  alarms: Alarm[];
   eventLog: string[];
-  lastScheduled: any;
+  lastScheduled: Alarm | null;
   nowISO: string;
   onRequestPermission: () => void;
   exactAllowed: boolean;
@@ -26,6 +27,7 @@ interface ActionsScreenProps {
   onOpenOverlayPermissionSettings: () => void;
   onScheduleIn: (seconds: number) => void;
   onStartTimer: (seconds: number) => void;
+  onScheduleAtTime: (hour: number, minute: number) => void;
   onCancelLast: () => void;
   onCancelAlarm: (alarmId: string) => void;
   onCancelAll: () => void;
@@ -46,17 +48,71 @@ export function ActionsScreen({
   onOpenOverlayPermissionSettings,
   onScheduleIn,
   onStartTimer,
+  onScheduleAtTime,
   onCancelLast,
   onCancelAlarm,
   onCancelAll,
   refreshAlarms,
 }: ActionsScreenProps) {
+  const [hour, setHour] = useState<string>("");
+  const [minute, setMinute] = useState<string>("");
+
+  const handleScheduleAtTime = () => {
+    const hourNum = parseInt(hour, 10);
+    const minuteNum = parseInt(minute, 10);
+
+    if (isNaN(hourNum) || isNaN(minuteNum)) {
+      alert("Please enter hour and minute.");
+      return;
+    }
+
+    if (hourNum < 0 || hourNum > 23) {
+      alert("Hour must be between 0-23.");
+      return;
+    }
+
+    if (minuteNum < 0 || minuteNum > 59) {
+      alert("Minute must be between 0-59.");
+      return;
+    }
+
+    onScheduleAtTime(hourNum, minuteNum);
+    setHour("");
+    setMinute("");
+  };
+
   return (
     <ScrollView style={styles.container}>
       <Text style={styles.header}>Actions</Text>
 
       <Group name="Real-time State">
         <AlarmStateView alarmState={alarmState} alarmHistory={alarmHistory} />
+      </Group>
+
+      <Group name="Schedule Alarm by Time">
+        <View style={styles.timeInputContainer}>
+          <View style={styles.timeInputRow}>
+            <Text style={styles.timeLabel}>Hour:</Text>
+            <TextInput
+              style={styles.timeInput}
+              placeholder="0-23"
+              value={hour}
+              onChangeText={setHour}
+              keyboardType="numeric"
+              maxLength={2}
+            />
+            <Text style={styles.timeLabel}>Minute:</Text>
+            <TextInput
+              style={styles.timeInput}
+              placeholder="0-59"
+              value={minute}
+              onChangeText={setMinute}
+              keyboardType="numeric"
+              maxLength={2}
+            />
+          </View>
+          <Button title="Schedule Alarm" onPress={handleScheduleAtTime} />
+        </View>
       </Group>
 
       <Group name="Quick Actions">
@@ -167,5 +223,26 @@ const styles = StyleSheet.create({
     fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
     color: "#374151",
     paddingVertical: 2,
+  },
+  timeInputContainer: {
+    gap: 12,
+  },
+  timeInputRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+  },
+  timeLabel: {
+    fontSize: 16,
+    fontWeight: "500",
+  },
+  timeInput: {
+    borderWidth: 1,
+    borderColor: "#d1d5db",
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 16,
+    minWidth: 80,
+    backgroundColor: "#fff",
   },
 });

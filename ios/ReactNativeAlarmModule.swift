@@ -198,9 +198,19 @@ public class ReactNativeAlarmModule: Module {
           // For alarms with dateISO, calculate time until alarm fires
           let timeUntilAlarm = target.timeIntervalSinceNow
           if timeUntilAlarm > 0 {
-            // If alarm is more than 60 seconds away, show countdown starting 60 seconds before
-            // If alarm is less than 60 seconds away, show countdown immediately
-            preAlertDuration = timeUntilAlarm >= 60 ? 60 : timeUntilAlarm
+            // 최소 5초 전부터 카운트다운 시작 (Live Activity가 알람 시간에 맞춰 표시되도록)
+            // 알람이 5초 이내면 즉시 시작, 그 외에는 최소 5초 전부터 시작
+            // 하지만 너무 길면 배터리 소모가 많으므로 최대 300초(5분)로 제한
+            let minPreAlert: Double = 5 // 최소 5초
+            let maxPreAlert: Double = 300 // 최대 5분
+            if timeUntilAlarm <= minPreAlert {
+              preAlertDuration = timeUntilAlarm
+            } else if timeUntilAlarm <= maxPreAlert {
+              preAlertDuration = minPreAlert
+            } else {
+              // 알람이 5분 이상 떨어져 있으면 5분 전부터 카운트다운 시작
+              preAlertDuration = maxPreAlert
+            }
           }
         }
         
@@ -237,18 +247,28 @@ public class ReactNativeAlarmModule: Module {
               attributes: attributes
             )
           } else if let target = targetDate {
-            // Calculate time until alarm fires and use minimum 60 seconds for preAlert
+            // Calculate time until alarm fires and use minimum 5 seconds for preAlert
+            // Live Activity가 알람 시간에 맞춰 표시되도록 최소값을 작게 설정
             let timeUntilAlarm = target.timeIntervalSinceNow
-            let preAlert = timeUntilAlarm >= 60 ? 60 : max(timeUntilAlarm, 1)
+            let minPreAlert: Double = 5 // 최소 5초
+            let maxPreAlert: Double = 300 // 최대 5분
+            let preAlert: Double
+            if timeUntilAlarm <= minPreAlert {
+              preAlert = max(timeUntilAlarm, 1)
+            } else if timeUntilAlarm <= maxPreAlert {
+              preAlert = minPreAlert
+            } else {
+              preAlert = maxPreAlert
+            }
             configuration = AlarmManager.AlarmConfiguration<RNMetadata>(
               countdownDuration: Alarm.CountdownDuration(preAlert: preAlert, postAlert: 300),
               schedule: sch,
               attributes: attributes
             )
           } else {
-            // Fallback: use 60 seconds
+            // Fallback: use 5 seconds (Live Activity가 알람 시간에 맞춰 표시되도록)
             configuration = AlarmManager.AlarmConfiguration<RNMetadata>(
-              countdownDuration: Alarm.CountdownDuration(preAlert: 60, postAlert: 300),
+              countdownDuration: Alarm.CountdownDuration(preAlert: 5, postAlert: 300),
               schedule: sch,
               attributes: attributes
             )

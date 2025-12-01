@@ -43,6 +43,7 @@ export default function App() {
     refreshAlarms: refreshAlarmsList,
     onScheduleIn,
     onStartTimer,
+    onScheduleAtTime,
     onCancelLast,
     onCancelAlarm,
     onCancelAll,
@@ -83,6 +84,7 @@ export default function App() {
             onOpenOverlayPermissionSettings={onOpenOverlayPermissionSettings}
             onScheduleIn={onScheduleIn}
             onStartTimer={onStartTimer}
+            onScheduleAtTime={onScheduleAtTime}
             onCancelLast={onCancelLast}
             onCancelAlarm={onCancelAlarm}
             onCancelAll={onCancelAll}
