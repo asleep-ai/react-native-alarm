@@ -9,13 +9,8 @@ interface IconChipProps {
 
 export function IconChip({ name, selected, onPress }: IconChipProps) {
   return (
-    <TouchableOpacity
-      onPress={onPress}
-      style={[styles.chip, selected && styles.chipSelected]}
-    >
-      <Text style={[styles.chipText, selected && styles.chipTextSelected]}>
-        {name}
-      </Text>
+    <TouchableOpacity onPress={onPress} style={[styles.chip, selected && styles.chipSelected]}>
+      <Text style={[styles.chipText, selected && styles.chipTextSelected]}>{name}</Text>
     </TouchableOpacity>
   );
 }
@@ -38,4 +33,3 @@ const styles = StyleSheet.create({
     color: "#fff",
   },
 });
-

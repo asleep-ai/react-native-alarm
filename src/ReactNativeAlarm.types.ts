@@ -42,21 +42,9 @@ export type AlarmState = {
 
 export type ReactNativeAlarmEvents = {
   onAlarmFired: (event: { id: AlarmId }) => void;
-  onAlarmStarted: (event: {
-    id: AlarmId;
-    label?: string;
-    remainingSeconds: number;
-  }) => void;
-  onAlarmSnoozed: (event: {
-    id: AlarmId;
-    label?: string;
-    snoozeUntilISO: string;
-  }) => void;
-  onAlarmStopped: (event: {
-    id: AlarmId;
-    label?: string;
-    stoppedAtISO: string;
-  }) => void;
+  onAlarmStarted: (event: { id: AlarmId; label?: string; remainingSeconds: number }) => void;
+  onAlarmSnoozed: (event: { id: AlarmId; label?: string; snoozeUntilISO: string }) => void;
+  onAlarmStopped: (event: { id: AlarmId; label?: string; stoppedAtISO: string }) => void;
   onAlarmStateChanged: (event: AlarmState) => void;
 };
 

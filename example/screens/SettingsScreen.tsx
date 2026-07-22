@@ -1,14 +1,5 @@
 import React from "react";
-import {
-  ScrollView,
-  Text,
-  View,
-  TextInput,
-  Switch,
-  Button,
-  StyleSheet,
-  Platform,
-} from "react-native";
+import { ScrollView, Text, View, TextInput, Switch, Button, StyleSheet, Platform } from "react-native";
 import { Group } from "../components/Group";
 import { ColorSwatch } from "../components/ColorSwatch";
 import { IconChip } from "../components/IconChip";
@@ -36,15 +27,8 @@ interface SettingsScreenProps {
 
 const iconOptions = ["", "ic_stat_alarm", "ic_stat_timer", "ic_alarm_small"];
 
-export function SettingsScreen({
-  available,
-  config,
-  setters,
-  onApplyConfig,
-}: SettingsScreenProps) {
-  const availabilityText = available
-    ? "Available (iOS 26+)"
-    : "Not available on this device";
+export function SettingsScreen({ available, config, setters, onApplyConfig }: SettingsScreenProps) {
+  const availabilityText = available ? "Available (iOS 26+)" : "Not available on this device";
 
   return (
     <ScrollView style={styles.container}>
@@ -53,9 +37,7 @@ export function SettingsScreen({
       <Group name="Availability">
         <Text>{availabilityText}</Text>
         {!available ? (
-          <Text style={styles.infoText}>
-            AlarmKit requires iOS 26+. On Android this example is a no-op.
-          </Text>
+          <Text style={styles.infoText}>AlarmKit requires iOS 26+. On Android this example is a no-op.</Text>
         ) : null}
       </Group>
 
@@ -101,17 +83,11 @@ export function SettingsScreen({
               </View>
               <View style={styles.switchRow}>
                 <Text>Use chronometer</Text>
-                <Switch
-                  value={config.androidUseChrono}
-                  onValueChange={setters.setAndroidUseChrono}
-                />
+                <Switch value={config.androidUseChrono} onValueChange={setters.setAndroidUseChrono} />
               </View>
               <View style={styles.switchRow}>
                 <Text>Overlay when unlocked</Text>
-                <Switch
-                  value={config.androidOverlayUnlocked}
-                  onValueChange={setters.setAndroidOverlayUnlocked}
-                />
+                <Switch value={config.androidOverlayUnlocked} onValueChange={setters.setAndroidOverlayUnlocked} />
               </View>
               <Text>Overlay background</Text>
               <View style={styles.colorSwatches}>
@@ -179,23 +155,11 @@ export function SettingsScreen({
                 style={styles.input}
               />
               <Text>Stop button text</Text>
-              <TextInput
-                value={config.iosStopText}
-                onChangeText={setters.setIosStopText}
-                style={styles.input}
-              />
+              <TextInput value={config.iosStopText} onChangeText={setters.setIosStopText} style={styles.input} />
               <Text>Pause button text</Text>
-              <TextInput
-                value={config.iosPauseText}
-                onChangeText={setters.setIosPauseText}
-                style={styles.input}
-              />
+              <TextInput value={config.iosPauseText} onChangeText={setters.setIosPauseText} style={styles.input} />
               <Text>Resume button text</Text>
-              <TextInput
-                value={config.iosResumeText}
-                onChangeText={setters.setIosResumeText}
-                style={styles.input}
-              />
+              <TextInput value={config.iosResumeText} onChangeText={setters.setIosResumeText} style={styles.input} />
             </>
           )}
           <Button title="Apply Config" onPress={onApplyConfig} />
@@ -246,4 +210,3 @@ const styles = StyleSheet.create({
     gap: 8,
   },
 });
-

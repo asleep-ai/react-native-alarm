@@ -56,8 +56,7 @@ export function AlarmCard({ alarm, onCancel }: AlarmCardProps) {
         {alarm.remainingSeconds !== undefined && alarm.remainingSeconds > 0 && (
           <Text style={styles.detailText}>
             <Text style={styles.detailLabel}>Remaining: </Text>
-            {Math.floor(alarm.remainingSeconds / 60)}m{" "}
-            {alarm.remainingSeconds % 60}s
+            {Math.floor(alarm.remainingSeconds / 60)}m {alarm.remainingSeconds % 60}s
           </Text>
         )}
       </View>

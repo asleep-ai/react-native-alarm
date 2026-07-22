@@ -1,10 +1,6 @@
 import { useState, useEffect } from "react";
 import { Platform } from "react-native";
-import {
-  isAvailable,
-  checkAlarmStates,
-  type AlarmState,
-} from "@asleep-ai/react-native-alarm";
+import { isAvailable, checkAlarmStates, type AlarmState } from "@asleep-ai/react-native-alarm";
 
 export function useAlarmState() {
   const [available, setAvailable] = useState<boolean>(false);
@@ -21,7 +17,7 @@ export function useAlarmState() {
       const id = setInterval(async () => {
         try {
           await checkAlarmStates();
-        } catch (e) {
+        } catch {
           // Ignore errors
         }
       }, 1000); // Check every second
@@ -48,4 +44,3 @@ export function useAlarmState() {
     clearState,
   };
 }
-

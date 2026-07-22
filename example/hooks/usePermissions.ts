@@ -32,19 +32,15 @@ export function usePermissions() {
         Alert.alert("Permission", "granted");
       } else {
         if (result.status === "denied") {
-          Alert.alert(
-            "Permission Denied",
-            "Alarm permission has been denied. Please enable it in Settings.",
-            [
-              { text: "Cancel", style: "cancel" },
-              {
-                text: "Open Settings",
-                onPress: async () => {
-                  await openSettings();
-                },
+          Alert.alert("Permission Denied", "Alarm permission has been denied. Please enable it in Settings.", [
+            { text: "Cancel", style: "cancel" },
+            {
+              text: "Open Settings",
+              onPress: async () => {
+                await openSettings();
               },
-            ]
-          );
+            },
+          ]);
         } else {
           Alert.alert("Permission", "denied");
         }
@@ -58,10 +54,7 @@ export function usePermissions() {
     try {
       const ok = await openExactAlarmSettings();
       if (!ok) {
-        Alert.alert(
-          "Info",
-          "Unable to open settings. You can allow exact alarms in system settings."
-        );
+        Alert.alert("Info", "Unable to open settings. You can allow exact alarms in system settings.");
       }
     } catch {
       Alert.alert("Error", "Failed to open exact alarm settings.");
@@ -82,10 +75,7 @@ export function usePermissions() {
     try {
       const ok = await openOverlayPermissionSettings();
       if (!ok) {
-        Alert.alert(
-          "Info",
-          "Unable to open overlay settings. You can allow overlays in system settings."
-        );
+        Alert.alert("Info", "Unable to open overlay settings. You can allow overlays in system settings.");
       }
     } catch {
       Alert.alert("Error", "Failed to open overlay settings.");
@@ -108,4 +98,3 @@ export function usePermissions() {
     onOpenOverlayPermissionSettings,
   };
 }
-

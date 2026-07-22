@@ -12,10 +12,7 @@ interface UseAlarmListenersProps {
   onStopped: () => void;
 }
 
-export function useAlarmListeners({
-  onStateChanged,
-  onStopped,
-}: UseAlarmListenersProps) {
+export function useAlarmListeners({ onStateChanged, onStopped }: UseAlarmListenersProps) {
   const [eventLog, setEventLog] = useState<string[]>([]);
 
   useEffect(() => {
@@ -49,4 +46,3 @@ export function useAlarmListeners({
 
   return { eventLog };
 }
-

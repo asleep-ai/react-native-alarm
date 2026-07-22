@@ -1,12 +1,6 @@
 import { useState, useCallback, useEffect } from "react";
 import { Platform, Alert } from "react-native";
-import {
-  scheduleAlarm,
-  getAlarms,
-  cancelAlarm,
-  cancelAll,
-  type Alarm,
-} from "@asleep-ai/react-native-alarm";
+import { scheduleAlarm, getAlarms, cancelAlarm, cancelAll, type Alarm } from "@asleep-ai/react-native-alarm";
 import type { AlarmConfig } from "./useAlarmConfig";
 
 interface UseAlarmActionsProps {
@@ -67,7 +61,7 @@ export function useAlarmActions({ config }: UseAlarmActionsProps) {
         Alert.alert("Error", String(e?.message ?? e));
       }
     },
-    [config, refresh]
+    [config, refresh],
   );
 
   const onStartTimer = useCallback(
@@ -104,7 +98,7 @@ export function useAlarmActions({ config }: UseAlarmActionsProps) {
         Alert.alert("Error", String(e?.message ?? e));
       }
     },
-    [config, refresh]
+    [config, refresh],
   );
 
   const onScheduleAtTime = useCallback(
@@ -151,7 +145,7 @@ export function useAlarmActions({ config }: UseAlarmActionsProps) {
         Alert.alert("Error", String(e?.message ?? e));
       }
     },
-    [config, refresh]
+    [config, refresh],
   );
 
   const onCancelLast = useCallback(async () => {
@@ -179,7 +173,7 @@ export function useAlarmActions({ config }: UseAlarmActionsProps) {
         Alert.alert("Error", String(e?.message ?? e));
       }
     },
-    [lastScheduled, refresh]
+    [lastScheduled, refresh],
   );
 
   const onCancelAll = useCallback(async () => {

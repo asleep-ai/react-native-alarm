@@ -11,11 +11,7 @@ export function ColorSwatch({ color, onPress, selected }: ColorSwatchProps) {
   return (
     <TouchableOpacity
       onPress={onPress}
-      style={[
-        styles.swatch,
-        { backgroundColor: color },
-        selected && styles.selected,
-      ]}
+      style={[styles.swatch, { backgroundColor: color }, selected && styles.selected]}
     />
   );
 }

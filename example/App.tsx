@@ -16,14 +16,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<Tab>("actions");
   const [nowISO, setNowISO] = useState<string>(new Date().toISOString());
 
-  const {
-    available,
-    alarmState,
-    alarmHistory,
-    setAlarmState,
-    saveToHistory,
-    clearState,
-  } = useAlarmState();
+  const { available, alarmState, alarmHistory, setAlarmState, saveToHistory, clearState } = useAlarmState();
 
   const { eventLog } = useAlarmListeners({
     onStateChanged: setAlarmState,
@@ -92,14 +85,7 @@ export default function App() {
           />
         );
       case "settings":
-        return (
-          <SettingsScreen
-            available={available}
-            config={config}
-            setters={setters}
-            onApplyConfig={onApplyConfig}
-          />
-        );
+        return <SettingsScreen available={available} config={config} setters={setters} onApplyConfig={onApplyConfig} />;
       default:
         return null;
     }

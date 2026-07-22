@@ -1,9 +1,5 @@
 import { NativeModule, requireNativeModule } from "expo-modules-core";
-import type {
-  ReactNativeAlarmEvents,
-  Alarm,
-  ScheduleAlarmOptions,
-} from "./ReactNativeAlarm.types";
+import type { ReactNativeAlarmEvents, Alarm, ScheduleAlarmOptions } from "./ReactNativeAlarm.types";
 import type { ReactNativeAlarmConfig } from "./ReactNativeAlarm.types";
 
 declare class ReactNativeAlarmModule extends NativeModule<ReactNativeAlarmEvents> {

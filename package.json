@@ -2,12 +2,27 @@
   "name": "@asleep-ai/react-native-alarm",
   "version": "0.1.16",
   "description": "Asleep React Native Alarm using iOS AlarmKit (iOS 26+)",
+  "keywords": [
+    "@asleep-ai/react-native-alarm",
+    "ReactNativeAlarm",
+    "expo",
+    "react-native"
+  ],
+  "homepage": "https://github.com/asleep-ai/react-native-alarm#readme",
+  "bugs": {
+    "url": "https://github.com/asleep-ai/react-native-alarm/issues"
+  },
+  "license": "MIT",
+  "author": "Qube <qube@asleep.ai> (Sun-Woo-Kim)",
+  "repository": "https://github.com/asleep-ai/react-native-alarm",
   "main": "build/index.js",
   "types": "build/index.d.ts",
   "scripts": {
     "build": "expo-module build",
     "clean": "expo-module clean",
-    "lint": "expo-module lint",
+    "format": "oxfmt",
+    "format:check": "oxfmt --check",
+    "lint": "oxlint",
     "test": "expo-module test",
     "typecheck": "tsc --noEmit",
     "prepare": "expo-module prepare",
@@ -16,24 +31,12 @@
     "open:ios": "xed example/ios",
     "open:android": "open -a \"Android Studio\" example/android"
   },
-  "keywords": [
-    "react-native",
-    "expo",
-    "@asleep-ai/react-native-alarm",
-    "ReactNativeAlarm"
-  ],
-  "repository": "https://github.com/asleep-ai/react-native-alarm",
-  "bugs": {
-    "url": "https://github.com/asleep-ai/react-native-alarm/issues"
-  },
-  "author": "Qube <qube@asleep.ai> (Sun-Woo-Kim)",
-  "license": "MIT",
-  "homepage": "https://github.com/asleep-ai/react-native-alarm#readme",
-  "dependencies": {},
   "devDependencies": {
     "@types/react": "~19.1.0",
-    "expo-module-scripts": "^5.0.7",
     "expo": "^54.0.24",
+    "expo-module-scripts": "^5.0.7",
+    "oxfmt": "^0.60.0",
+    "oxlint": "^1.75.0",
     "react-native": "0.81.5",
     "typescript": "~5.9.2"
   },
@@ -41,5 +44,6 @@
     "expo": "*",
     "react": "*",
     "react-native": "*"
-  }
+  },
+  "packageManager": "pnpm@11.15.1"
 }

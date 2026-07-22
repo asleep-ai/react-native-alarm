@@ -1,13 +1,5 @@
 import React, { useState } from "react";
-import {
-  ScrollView,
-  Text,
-  View,
-  Button,
-  StyleSheet,
-  Platform,
-  TextInput,
-} from "react-native";
+import { ScrollView, Text, View, Button, StyleSheet, Platform, TextInput } from "react-native";
 import { Group } from "../components/Group";
 import { AlarmStateView } from "../components/AlarmStateView";
 import { AlarmCard } from "../components/AlarmCard";
@@ -122,28 +114,13 @@ export function ActionsScreen({
             <>
               <Text>Exact alarms allowed: {String(exactAllowed)}</Text>
               <Text>Overlay allowed: {String(overlayAllowed)}</Text>
-              <Button
-                title="Open Exact Alarm Settings"
-                onPress={onOpenExactAlarmSettings}
-              />
-              <Button
-                title="Open Overlay Permission Settings"
-                onPress={onOpenOverlayPermissionSettings}
-              />
+              <Button title="Open Exact Alarm Settings" onPress={onOpenExactAlarmSettings} />
+              <Button title="Open Overlay Permission Settings" onPress={onOpenOverlayPermissionSettings} />
             </>
           ) : null}
-          <Button
-            title="Schedule Alarm in 5s"
-            onPress={() => onScheduleIn(5)}
-          />
-          <Button
-            title="Schedule Alarm in 10s"
-            onPress={() => onScheduleIn(10)}
-          />
-          <Button
-            title="Schedule Alarm in 30s"
-            onPress={() => onScheduleIn(30)}
-          />
+          <Button title="Schedule Alarm in 5s" onPress={() => onScheduleIn(5)} />
+          <Button title="Schedule Alarm in 10s" onPress={() => onScheduleIn(10)} />
+          <Button title="Schedule Alarm in 30s" onPress={() => onScheduleIn(30)} />
           <Button title="Refresh Alarms" onPress={refreshAlarms} />
           <Button title="Cancel Last Alarm" onPress={onCancelLast} />
           <Button title="Cancel All Alarms" onPress={onCancelAll} />
@@ -153,8 +130,7 @@ export function ActionsScreen({
         <Text style={styles.nowText}>Now: {nowISO}</Text>
         {lastScheduled ? (
           <Text style={styles.lastScheduledText}>
-            Last scheduled: {lastScheduled.label ?? "(no label)"} —{" "}
-            {lastScheduled.dateISO}
+            Last scheduled: {lastScheduled.label ?? "(no label)"} — {lastScheduled.dateISO}
           </Text>
         ) : null}
       </Group>

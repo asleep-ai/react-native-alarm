@@ -64,9 +64,7 @@ export async function getAndroidPermissionStatus(): Promise<{
   return ReactNativeAlarmModule.getAndroidPermissionStatus();
 }
 
-export async function scheduleAlarm(
-  options: ScheduleAlarmOptions
-): Promise<Alarm> {
+export async function scheduleAlarm(options: ScheduleAlarmOptions): Promise<Alarm> {
   // Workaround: Android bridge may fail on nested objects in a single-arg call.
   // If style overrides are provided, apply them via configure() first, then
   // call native scheduleAlarm without the nested android object.
@@ -104,26 +102,24 @@ export type Subscription = {
 };
 
 export function addAlarmStartedListener(
-  listener: (event: { id: string; label?: string; remainingSeconds: number }) => void
+  listener: (event: { id: string; label?: string; remainingSeconds: number }) => void,
 ): Subscription {
   return emitter.addListener("onAlarmStarted", listener);
 }
 
 export function addAlarmSnoozedListener(
-  listener: (event: { id: string; label?: string; snoozeUntilISO: string }) => void
+  listener: (event: { id: string; label?: string; snoozeUntilISO: string }) => void,
 ): Subscription {
   return emitter.addListener("onAlarmSnoozed", listener);
 }
 
 export function addAlarmStoppedListener(
-  listener: (event: { id: string; label?: string; stoppedAtISO: string }) => void
+  listener: (event: { id: string; label?: string; stoppedAtISO: string }) => void,
 ): Subscription {
   return emitter.addListener("onAlarmStopped", listener);
 }
 
-export function addAlarmStateChangedListener(
-  listener: (event: AlarmState) => void
-): Subscription {
+export function addAlarmStateChangedListener(listener: (event: AlarmState) => void): Subscription {
   return emitter.addListener("onAlarmStateChanged", listener);
 }
 

@@ -1,11 +1,5 @@
 import React from "react";
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  StyleSheet,
-  Platform,
-} from "react-native";
+import { View, Text, TouchableOpacity, StyleSheet, Platform } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 type Tab = "actions" | "settings";
@@ -17,44 +11,21 @@ interface BottomTabBarProps {
 
 export function BottomTabBar({ activeTab, onTabChange }: BottomTabBarProps) {
   const insets = useSafeAreaInsets();
-  const bottomPadding = Math.max(
-    insets.bottom,
-    Platform.OS === "ios" ? 20 : 10
-  );
+  const bottomPadding = Math.max(insets.bottom, Platform.OS === "ios" ? 20 : 10);
 
   return (
     <View style={[styles.container, { paddingBottom: bottomPadding }]}>
       <TouchableOpacity
-        style={[
-          styles.tabItem,
-          activeTab === "actions" && styles.tabItemActive,
-        ]}
+        style={[styles.tabItem, activeTab === "actions" && styles.tabItemActive]}
         onPress={() => onTabChange("actions")}
       >
-        <Text
-          style={[
-            styles.tabText,
-            activeTab === "actions" && styles.tabTextActive,
-          ]}
-        >
-          Actions
-        </Text>
+        <Text style={[styles.tabText, activeTab === "actions" && styles.tabTextActive]}>Actions</Text>
       </TouchableOpacity>
       <TouchableOpacity
-        style={[
-          styles.tabItem,
-          activeTab === "settings" && styles.tabItemActive,
-        ]}
+        style={[styles.tabItem, activeTab === "settings" && styles.tabItemActive]}
         onPress={() => onTabChange("settings")}
       >
-        <Text
-          style={[
-            styles.tabText,
-            activeTab === "settings" && styles.tabTextActive,
-          ]}
-        >
-          Settings
-        </Text>
+        <Text style={[styles.tabText, activeTab === "settings" && styles.tabTextActive]}>Settings</Text>
       </TouchableOpacity>
     </View>
   );
