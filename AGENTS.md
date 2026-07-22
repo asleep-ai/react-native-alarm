@@ -2,7 +2,7 @@
 
 Expo module `@asleep-ai/react-native-alarm`: iOS AlarmKit (iOS 26+) and Android AlarmManager alarm APIs for React Native. See `AGENT.md` for architecture notes.
 
-- Package manager: pnpm only, from the repo root (`example/` is a workspace package). `.npmrc` sets `node-linker=hoisted`, required for React Native.
+- Package manager: pnpm only, from the repo root (`example/` is a workspace package). `pnpm-workspace.yaml` sets `nodeLinker: hoisted`, required for React Native; pnpm 11 reads pnpm settings from `pnpm-workspace.yaml`, not `.npmrc`.
 - Gates: `pnpm run lint` (oxlint), `pnpm run format:check` (oxfmt, printWidth 120), `pnpm run typecheck`, `pnpm run build`.
 - CI (`.github/workflows/ci.yml`): `test` (typecheck + build) and `lint` (oxlint + format check) on PRs and pushes to main/develop.
 - Releases are automated (`.github/workflows/publish.yml`): any non-bump push to `main` auto-bumps the patch version, publishes to npm, and creates a GitHub Release. Minor/major via workflow_dispatch.
