@@ -1,5 +1,9 @@
 # @asleep-ai/react-native-alarm
 
+[![CI](https://github.com/asleep-ai/react-native-alarm/actions/workflows/ci.yml/badge.svg)](https://github.com/asleep-ai/react-native-alarm/actions/workflows/ci.yml)
+[![npm version](https://img.shields.io/npm/v/%40asleep-ai%2Freact-native-alarm.svg)](https://www.npmjs.com/package/@asleep-ai/react-native-alarm)
+[![license](https://img.shields.io/npm/l/%40asleep-ai%2Freact-native-alarm.svg)](LICENSE)
+
 React Native alarm utilities powered by iOS AlarmKit (iOS 26+), built with Expo Modules API.
 
 ## Overview
@@ -65,13 +69,7 @@ The library automatically configures Android permissions. Ensure your `AndroidMa
 ### Basic Usage
 
 ```typescript
-import {
-  isAvailable,
-  requestPermission,
-  scheduleAlarm,
-  getAlarms,
-  cancelAlarm,
-} from "@asleep-ai/react-native-alarm";
+import { isAvailable, requestPermission, scheduleAlarm, getAlarms, cancelAlarm } from "@asleep-ai/react-native-alarm";
 
 async function setupAlarm() {
   // 1. Check availability (iOS 26+)
@@ -148,19 +146,15 @@ export function usePermissions() {
         Alert.alert("Permission", "Granted");
       } else {
         if (result.status === "denied") {
-          Alert.alert(
-            "Permission Denied",
-            "Alarm permission has been denied. Please enable it in Settings.",
-            [
-              { text: "Cancel", style: "cancel" },
-              {
-                text: "Open Settings",
-                onPress: async () => {
-                  await openSettings();
-                },
+          Alert.alert("Permission Denied", "Alarm permission has been denied. Please enable it in Settings.", [
+            { text: "Cancel", style: "cancel" },
+            {
+              text: "Open Settings",
+              onPress: async () => {
+                await openSettings();
               },
-            ]
-          );
+            },
+          ]);
         } else {
           Alert.alert("Permission", "Denied");
         }
@@ -174,10 +168,7 @@ export function usePermissions() {
     try {
       const ok = await openExactAlarmSettings();
       if (!ok) {
-        Alert.alert(
-          "Info",
-          "Unable to open settings. You can allow exact alarms in system settings."
-        );
+        Alert.alert("Info", "Unable to open settings. You can allow exact alarms in system settings.");
       }
     } catch {
       Alert.alert("Error", "Failed to open exact alarm settings.");
@@ -198,10 +189,7 @@ export function usePermissions() {
     try {
       const ok = await openOverlayPermissionSettings();
       if (!ok) {
-        Alert.alert(
-          "Info",
-          "Unable to open overlay settings. You can allow overlays in system settings."
-        );
+        Alert.alert("Info", "Unable to open overlay settings. You can allow overlays in system settings.");
       }
     } catch {
       Alert.alert("Error", "Failed to open overlay settings.");
@@ -234,11 +222,7 @@ Create a hook to track alarm state:
 // hooks/useAlarmState.ts
 import { useState, useEffect } from "react";
 import { Platform } from "react-native";
-import {
-  isAvailable,
-  checkAlarmStates,
-  type AlarmState,
-} from "@asleep-ai/react-native-alarm";
+import { isAvailable, checkAlarmStates, type AlarmState } from "@asleep-ai/react-native-alarm";
 
 export function useAlarmState() {
   const [available, setAvailable] = useState<boolean>(false);
@@ -304,10 +288,7 @@ interface UseAlarmListenersProps {
   onStopped: () => void;
 }
 
-export function useAlarmListeners({
-  onStateChanged,
-  onStopped,
-}: UseAlarmListenersProps) {
+export function useAlarmListeners({ onStateChanged, onStopped }: UseAlarmListenersProps) {
   const [eventLog, setEventLog] = useState<string[]>([]);
 
   useEffect(() => {
@@ -351,13 +332,7 @@ Create a hook to handle alarm operations:
 // hooks/useAlarmActions.ts
 import { useState, useCallback, useEffect } from "react";
 import { Platform, Alert } from "react-native";
-import {
-  scheduleAlarm,
-  getAlarms,
-  cancelAlarm,
-  cancelAll,
-  type Alarm,
-} from "@asleep-ai/react-native-alarm";
+import { scheduleAlarm, getAlarms, cancelAlarm, cancelAll, type Alarm } from "@asleep-ai/react-native-alarm";
 import type { AlarmConfig } from "./useAlarmConfig";
 
 interface UseAlarmActionsProps {
@@ -417,7 +392,7 @@ export function useAlarmActions({ config }: UseAlarmActionsProps) {
         Alert.alert("Error", String(e?.message ?? e));
       }
     },
-    [config, refresh]
+    [config, refresh],
   );
 
   const onStartTimer = useCallback(
@@ -453,7 +428,7 @@ export function useAlarmActions({ config }: UseAlarmActionsProps) {
         Alert.alert("Error", String(e?.message ?? e));
       }
     },
-    [config, refresh]
+    [config, refresh],
   );
 
   const onCancelLast = useCallback(async () => {
@@ -481,7 +456,7 @@ export function useAlarmActions({ config }: UseAlarmActionsProps) {
         Alert.alert("Error", String(e?.message ?? e));
       }
     },
-    [lastScheduled, refresh]
+    [lastScheduled, refresh],
   );
 
   const onCancelAll = useCallback(async () => {
@@ -534,18 +509,13 @@ export interface AlarmConfig {
 
 export function useAlarmConfig() {
   const [androidSmallIcon, setAndroidSmallIcon] = useState<string>("");
-  const [androidAccentColor, setAndroidAccentColor] =
-    useState<string>("#4CAF50");
+  const [androidAccentColor, setAndroidAccentColor] = useState<string>("#4CAF50");
   const [androidUseChrono, setAndroidUseChrono] = useState<boolean>(true);
-  const [androidOverlayUnlocked, setAndroidOverlayUnlocked] =
-    useState<boolean>(true);
+  const [androidOverlayUnlocked, setAndroidOverlayUnlocked] = useState<boolean>(true);
   const [androidOverlayBg, setAndroidOverlayBg] = useState<string>("#000000");
-  const [androidOverlayText, setAndroidOverlayText] =
-    useState<string>("#FFFFFF");
-  const [androidOverlayBtnBg, setAndroidOverlayBtnBg] =
-    useState<string>("#3b82f6");
-  const [androidOverlayBtnText, setAndroidOverlayBtnText] =
-    useState<string>("#FFFFFF");
+  const [androidOverlayText, setAndroidOverlayText] = useState<string>("#FFFFFF");
+  const [androidOverlayBtnBg, setAndroidOverlayBtnBg] = useState<string>("#3b82f6");
+  const [androidOverlayBtnText, setAndroidOverlayBtnText] = useState<string>("#FFFFFF");
   const [iosTint, setIosTint] = useState<string>("#007AFF");
   const [iosStopText, setIosStopText] = useState<string>("Done");
   const [iosPauseText, setIosPauseText] = useState<string>("Pause");
@@ -1283,10 +1253,7 @@ subscription.remove();
 Listens for any alarm state changes. This provides comprehensive state information including whether the alarm is ringing, snoozed, and remaining time.
 
 ```typescript
-import {
-  addAlarmStateChangedListener,
-  type AlarmState,
-} from "@asleep-ai/react-native-alarm";
+import { addAlarmStateChangedListener, type AlarmState } from "@asleep-ai/react-native-alarm";
 
 const subscription = addAlarmStateChangedListener((state: AlarmState) => {
   console.log("Alarm state changed:", state.id);
@@ -1623,8 +1590,8 @@ A complete example app is available in the `example` folder. It demonstrates:
 To run the example:
 
 ```bash
+pnpm install
 cd example
-yarn install
 npx expo start
 ```
 
@@ -1633,7 +1600,7 @@ npx expo start
 ### Building the Library
 
 ```bash
-npm run build
+pnpm build
 ```
 
 ### Running the Example App
@@ -1645,9 +1612,10 @@ npx expo start
 
 ## Publishing
 
+- Automated: every push to `main` auto-bumps the patch version, publishes to npm, and creates a GitHub Release
+- Minor/major releases: run the "Publish to npm" workflow (workflow_dispatch) with the desired version type
+- Pushing a tag `v*.*.*` also triggers a publish
 - Manual publish: `npm publish --access public`
-- Version bump: `npm run version:patch|minor|major`
-- Automated: Push a tag `v*.*.*` or use GitHub Actions workflow_dispatch
 
 ## Branch Strategy
 
