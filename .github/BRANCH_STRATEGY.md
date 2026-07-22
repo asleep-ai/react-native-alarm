@@ -6,7 +6,7 @@
 
 - **`main`**: Production release branch
   - Always maintain stable state
-  - Only allow npm publishing via tags (`v*.*.*`)
+  - Publishing is driven by the `version` field in `package.json` (see Publishing Process)
   - No direct commits (merge via PR only)
 
 ### Supporting Branches
@@ -65,49 +65,23 @@
 
 ### Publishing Process
 
-#### Method 1: GitHub Actions Manual Deployment
+Releases are driven by the `version` field in `package.json` on `main`:
 
-1. Go to GitHub repository → Actions tab
-2. Select "Publish to npm" workflow
-3. Click "Run workflow"
-4. Select version type (patch/minor/major)
-5. Automatically updates version, creates tag, and publishes to npm
+1. Bump the version in your PR (e.g. `npm version patch --no-git-tag-version`)
+2. Merge the PR to `main`
+3. The "Publish to npm" workflow publishes to npm via OIDC trusted publishing (no tokens), then creates the `vX.Y.Z` tag and GitHub Release
+4. If the version is already on npm, the workflow is a no-op — merges without a version bump do not release
 
-#### Method 2: Deploy via Tag
+Manual fallback: run the "Publish to npm" workflow (workflow_dispatch) to retry publishing the current version, or `npm publish --access public` locally.
 
-```bash
-# Update version
-npm version patch|minor|major
+## Branch Protection
 
-# Push tag
-git push origin main
-git push origin --tags
+Enforced by the `main-protection` repository ruleset:
 
-# GitHub Actions automatically deploys
-```
-
-#### Method 3: Manual Deployment
-
-```bash
-npm run build
-npm publish --access public
-```
-
-## Branch Protection Rules Recommendations
-
-Recommended settings in GitHub repository:
-
-### main Branch Protection
-
-- ✅ Require pull request reviews before merging
-- ✅ Require status checks to pass before merging
-- ✅ Require branches to be up to date before merging
-- ✅ Do not allow bypassing the above settings
-
-### Status Checks
-
-- Build (TypeScript compilation)
-- Typecheck (Type checking)
+- Pull request required before merging
+- Required status checks: `test` (typecheck + build) and `lint` (oxlint + format check)
+- Force pushes and branch deletion blocked
+- Repository admins may bypass
 
 ## Version Management
 

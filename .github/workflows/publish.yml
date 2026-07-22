@@ -4,43 +4,19 @@ on:
   push:
     branches:
       - main
-    tags:
-      - "v*.*.*" # Auto-deploy on tag push
   workflow_dispatch:
-    inputs:
-      version_type:
-        description: "Version type (patch/minor/major)"
-        required: true
-        type: choice
-        options:
-          - patch
-          - minor
-          - major
+
+permissions:
+  contents: write
+  id-token: write
 
 jobs:
   publish:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      id-token: write
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Check if version bump commit
-        id: check_commit
-        run: |
-          COMMIT_MSG=$(git log -1 --pretty=%B)
-          if echo "$COMMIT_MSG" | grep -qE "chore: bump version|\[skip ci\]|\[skip version\]"; then
-            echo "skip_version_bump=true" >> $GITHUB_OUTPUT
-            echo "Skipping version bump - this is a version bump commit"
-          else
-            echo "skip_version_bump=false" >> $GITHUB_OUTPUT
-          fi
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -49,150 +25,61 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: "22"
-          registry-url: "https://registry.npmjs.org"
+
+      - name: Check whether this version needs publishing
+        id: version
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          PUBLISHED=$(npm view "@asleep-ai/react-native-alarm@$VERSION" version 2>/dev/null || true)
+          if [ "$PUBLISHED" = "$VERSION" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "Version $VERSION is already on npm - nothing to publish"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+            echo "Version $VERSION is not on npm - publishing"
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Install dependencies
+        if: steps.version.outputs.skip == 'false'
         run: pnpm install --frozen-lockfile
 
       - name: Build
+        if: steps.version.outputs.skip == 'false'
         run: pnpm run build
 
       - name: Run typecheck
+        if: steps.version.outputs.skip == 'false'
         run: pnpm run typecheck
 
-      - name: Auto bump patch version on main push
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.check_commit.outputs.skip_version_bump == 'false'
-        id: auto_version
-        run: |
-          CURRENT_VERSION=$(node -p "require('./package.json').version")
+      - name: Update npm for trusted publishing
+        if: steps.version.outputs.skip == 'false'
+        run: npm install -g npm@latest
 
-          # Parse version
-          IFS='.' read -r -a VERSION_PARTS <<< "$CURRENT_VERSION"
-          MAJOR=${VERSION_PARTS[0]}
-          MINOR=${VERSION_PARTS[1]}
-          PATCH=${VERSION_PARTS[2]}
-
-          # Increment patch version
-          PATCH=$((PATCH + 1))
-          NEW_VERSION="$MAJOR.$MINOR.$PATCH"
-
-          echo "current_version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
-          echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
-          echo "tag=v$NEW_VERSION" >> $GITHUB_OUTPUT
-
-          # Update package.json
-          npm version $NEW_VERSION --no-git-tag-version
-
-          echo "Version bumped from $CURRENT_VERSION to $NEW_VERSION"
-
-      - name: Commit and push version bump with tag
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.check_commit.outputs.skip_version_bump == 'false'
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add package.json
-          git commit -m "chore: bump version to ${{ steps.auto_version.outputs.new_version }} [skip ci]"
-          git tag -a "v${{ steps.auto_version.outputs.new_version }}" -m "Release v${{ steps.auto_version.outputs.new_version }}"
-          git push origin main
-          git push origin "v${{ steps.auto_version.outputs.new_version }}"
-
-      - name: Determine version
-        id: version
-        if: github.event_name == 'workflow_dispatch'
-        run: |
-          VERSION_TYPE=${{ github.event.inputs.version_type }}
-          CURRENT_VERSION=$(node -p "require('./package.json').version")
-
-          # Parse version
-          IFS='.' read -r -a VERSION_PARTS <<< "$CURRENT_VERSION"
-          MAJOR=${VERSION_PARTS[0]}
-          MINOR=${VERSION_PARTS[1]}
-          PATCH=${VERSION_PARTS[2]}
-
-          # Increment version
-          case $VERSION_TYPE in
-            major)
-              MAJOR=$((MAJOR + 1))
-              MINOR=0
-              PATCH=0
-              ;;
-            minor)
-              MINOR=$((MINOR + 1))
-              PATCH=0
-              ;;
-            patch)
-              PATCH=$((PATCH + 1))
-              ;;
-          esac
-
-          NEW_VERSION="$MAJOR.$MINOR.$PATCH"
-          echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
-          echo "tag=v$NEW_VERSION" >> $GITHUB_OUTPUT
-
-      - name: Bump version and create tag
-        if: github.event_name == 'workflow_dispatch'
-        run: |
-          npm version ${{ github.event.inputs.version_type }} --no-git-tag-version
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add package.json
-          git commit -m "chore: bump version to ${{ steps.version.outputs.new_version }}"
-          git tag -a "v${{ steps.version.outputs.new_version }}" -m "Release v${{ steps.version.outputs.new_version }}"
-          git push origin main
-          git push origin "v${{ steps.version.outputs.new_version }}"
-
-      - name: Extract version from tag
-        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
-        run: |
-          VERSION=${GITHUB_REF#refs/tags/v}
-          echo "version=$VERSION" >> $GITHUB_ENV
-
-      - name: Extract version for main push
-        if: github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.check_commit.outputs.skip_version_bump == 'false'
-        run: |
-          VERSION=${{ steps.auto_version.outputs.new_version }}
-          echo "version=$VERSION" >> $GITHUB_ENV
-
-      - name: Publish to npm
-        if: |
-          (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')) ||
-          (github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.check_commit.outputs.skip_version_bump == 'false')
+      - name: Publish to npm (OIDC trusted publishing)
+        if: steps.version.outputs.skip == 'false'
         run: npm publish --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
-      - name: Set release tag name
-        id: release_tag
-        if: |
-          (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')) ||
-          (github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.check_commit.outputs.skip_version_bump == 'false')
+      - name: Create tag and GitHub Release
+        if: steps.version.outputs.skip == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
-            TAG_NAME=${GITHUB_REF#refs/tags/}
-          else
-            TAG_NAME="v${{ env.version }}"
+          TAG="v${{ steps.version.outputs.version }}"
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            echo "Release $TAG already exists - skipping"
+            exit 0
           fi
-          echo "tag_name=$TAG_NAME" >> $GITHUB_OUTPUT
+          gh release create "$TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "Release $TAG" \
+            --notes "## Changes
 
-      - name: Create GitHub Release
-        if: |
-          (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')) ||
-          (github.event_name == 'push' && github.ref == 'refs/heads/main' && steps.check_commit.outputs.skip_version_bump == 'false')
-        uses: actions/create-release@v1
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          tag_name: ${{ steps.release_tag.outputs.tag_name }}
-          release_name: Release ${{ steps.release_tag.outputs.tag_name }}
-          body: |
-            ## Changes
+          See the [commit history](https://github.com/asleep-ai/react-native-alarm/commits/main) for details.
 
-            See the [commit history](https://github.com/asleep-ai/react-native-alarm/commits/main) for details.
+          ## Installation
 
-            ## Installation
-
-            ```bash
-            npm install @asleep-ai/react-native-alarm@${{ env.version }}
-            ```
-          draft: false
-          prerelease: false
+          \`\`\`bash
+          npm install @asleep-ai/react-native-alarm@${{ steps.version.outputs.version }}
+          \`\`\`"

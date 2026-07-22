@@ -1612,10 +1612,10 @@ npx expo start
 
 ## Publishing
 
-- Automated: every push to `main` auto-bumps the patch version, publishes to npm, and creates a GitHub Release
-- Minor/major releases: run the "Publish to npm" workflow (workflow_dispatch) with the desired version type
-- Pushing a tag `v*.*.*` also triggers a publish
-- Manual publish: `npm publish --access public`
+- Bump `version` in `package.json` in your PR (e.g. `npm version patch --no-git-tag-version`)
+- Merging to `main` publishes the new version to npm (OIDC trusted publishing), then creates the tag and GitHub Release
+- Versions already on npm are skipped, so merges without a version bump do not release
+- Manual fallback: run the "Publish to npm" workflow (workflow_dispatch) or `npm publish --access public`
 
 ## Branch Strategy
 
