@@ -65,14 +65,15 @@
 
 ### Publishing Process
 
-Releases are driven by the `version` field in `package.json` on `main`:
+Merging to `main` never publishes. Releases are explicit:
 
-1. Bump the version in your PR (e.g. `npm version patch --no-git-tag-version`)
-2. Merge the PR to `main`
-3. The "Publish to npm" workflow publishes to npm via OIDC trusted publishing (no tokens), then creates the `vX.Y.Z` tag and GitHub Release
-4. If the version is already on npm, the workflow is a no-op — merges without a version bump do not release
+1. Bump the version in your PR (e.g. `npm version patch --no-git-tag-version`) and merge to `main`
+2. Trigger the release either way:
+   - Push the matching tag: `git tag vX.Y.Z && git push origin vX.Y.Z`
+   - Or run the "Publish to npm" workflow from the Actions tab (workflow_dispatch)
+3. The workflow verifies the tag matches `package.json` and the version is not already on npm, publishes via OIDC trusted publishing (no tokens), and creates the GitHub Release (and tag, when run manually)
 
-Manual fallback: run the "Publish to npm" workflow (workflow_dispatch) to retry publishing the current version, or `npm publish --access public` locally.
+Manual fallback: `npm publish --access public` locally.
 
 ## Branch Protection
 

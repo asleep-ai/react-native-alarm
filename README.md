@@ -1612,10 +1612,11 @@ npx expo start
 
 ## Publishing
 
-- Bump `version` in `package.json` in your PR (e.g. `npm version patch --no-git-tag-version`)
-- Merging to `main` publishes the new version to npm (OIDC trusted publishing), then creates the tag and GitHub Release
-- Versions already on npm are skipped, so merges without a version bump do not release
-- Manual fallback: run the "Publish to npm" workflow (workflow_dispatch) or `npm publish --access public`
+Merging to `main` never publishes. To release:
+
+1. Bump `version` in `package.json` in a PR (e.g. `npm version patch --no-git-tag-version`) and merge it
+2. Push the matching tag (`git tag vX.Y.Z && git push origin vX.Y.Z`), or run the "Publish to npm" workflow from the Actions tab
+3. The workflow verifies the tag matches `package.json` and the version is not already on npm, publishes via OIDC trusted publishing, and creates the GitHub Release (and tag, when run manually)
 
 ## Branch Strategy
 
