@@ -9,8 +9,10 @@ name: Release
 # events raised by GITHUB_TOKEN do not trigger other workflows, so a PR it
 # opened would never run ci.yml and the required checks would hang forever. A
 # PAT/App token raises real events, so CI runs and the required checks can
-# pass. The token needs contents:write + pull-requests:write on this repo, and
-# its org-secret visibility must include this repository.
+# pass. Token scopes on this repo: a classic PAT with `repo` covers everything;
+# a fine-grained token/App needs Contents: write, Pull requests: write, and
+# Checks: read (the wait step reads check runs). Its org-secret visibility must
+# include this repository.
 
 on:
   workflow_dispatch:
@@ -37,9 +39,22 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # workflow_dispatch can be launched from any branch. Releasing from a
+      # non-main ref would bump that branch's code and squash-merge it into
+      # main, so refuse anything but main before doing any work.
+      - name: Guard - release only from main
+        env:
+          REF: ${{ github.ref }}
+        run: |
+          if [ "$REF" != "refs/heads/main" ]; then
+            echo "::error::Release must be dispatched from main (got $REF)"
+            exit 1
+          fi
+
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: main
           fetch-depth: 0
           # PAT/App token so the branch push and PR raise events that trigger
           # ci.yml; kept in git config for the later tag push.
