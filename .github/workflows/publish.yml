@@ -131,6 +131,7 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           VERSION: ${{ steps.version.outputs.version }}
           NOTES_PATH: ${{ steps.notes.outputs.path }}
+          PUBLISH_NEEDED: ${{ steps.version.outputs.publish_needed }}
         run: |
           TAG="v$VERSION"
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
@@ -145,8 +146,20 @@ jobs:
             echo "npm install @asleep-ai/react-native-alarm@$VERSION"
             echo '```'
           } >> "$NOTES_PATH"
-          gh release create "$TAG" \
-            --repo "$GITHUB_REPOSITORY" \
-            --target "$GITHUB_SHA" \
-            --title "Release $TAG" \
-            --notes-file "$NOTES_PATH"
+          if git rev-parse -q --verify "refs/tags/$TAG" > /dev/null; then
+            gh release create "$TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "Release $TAG" \
+              --notes-file "$NOTES_PATH"
+          elif [ "$PUBLISH_NEEDED" = "true" ]; then
+            gh release create "$TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --target "$GITHUB_SHA" \
+              --title "Release $TAG" \
+              --notes-file "$NOTES_PATH"
+          else
+            # Reconcile mode with no tag: the commit npm was published from is
+            # unknown, so tagging the current commit could mislabel the release.
+            echo "::error::Version $VERSION is on npm but tag $TAG does not exist - create the tag at the published commit, then rerun"
+            exit 1
+          fi
