@@ -975,6 +975,17 @@ public class ReactNativeAlarmModule: Module {
             "remainingSeconds": finalRemaining,
             "snoozeUntilISO": snoozeUntilISO
           ])
+        } else if currentState == .paused {
+          // Cold-start / restart of an already-paused AlarmKit alarm: surface
+          // the paused edge so pause-aware JS countdowns don't run.
+          sendEvent("onAlarmStateChanged", [
+            "id": id,
+            "label": label,
+            "isRinging": false,
+            "isSnoozed": false,
+            "isPaused": true,
+            "remainingSeconds": finalRemaining
+          ])
         } else if isRinging {
           sendEvent("onAlarmStarted", [
             "id": id,
