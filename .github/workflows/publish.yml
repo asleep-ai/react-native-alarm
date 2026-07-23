@@ -9,6 +9,7 @@ on:
 permissions:
   contents: write
   id-token: write
+  pull-requests: read
 
 jobs:
   publish:
@@ -17,6 +18,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
       - name: Check whether this version needs publishing
         id: version
@@ -54,6 +57,26 @@ jobs:
       - name: Run typecheck
         run: pnpm run typecheck
 
+      # Runs before npm publish: a failure here must not leave the version
+      # published on npm with no tag/release, which would make the workflow
+      # non-rerunnable (the version check refuses already-published versions).
+      - name: Generate release notes
+        id: notes
+        uses: asleep-ai/actions/release-notes@release-notes/v1
+        with:
+          # HEAD works for both tag push and workflow_dispatch (where the
+          # v* tag does not exist yet); the previous tag is auto-derived.
+          current-tag: HEAD
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          system-prompt: |
+            Release notes for @asleep-ai/react-native-alarm, a React Native alarm library.
+            Output markdown only - no preamble, no trailing commentary.
+            Sections: '## New Features', '## Improvements', '## Bug Fixes', '## Internal Changes'.
+            Omit empty sections; do not invent content.
+            Rewrite commit subjects as user-facing bullets using the PR description when present.
+            Wrap code identifiers and paths in backticks; preserve PR references (#NNN).
+            Ignore Co-Authored-By trailers and merge artefacts.
+
       - name: Update npm for trusted publishing
         run: npm install -g npm@latest
 
@@ -69,16 +92,16 @@ jobs:
             echo "Release $TAG already exists - skipping"
             exit 0
           fi
+          {
+            echo ""
+            echo "## Installation"
+            echo ""
+            echo '```bash'
+            echo "npm install @asleep-ai/react-native-alarm@${{ steps.version.outputs.version }}"
+            echo '```'
+          } >> "${{ steps.notes.outputs.path }}"
           gh release create "$TAG" \
             --repo "$GITHUB_REPOSITORY" \
             --target "$GITHUB_SHA" \
             --title "Release $TAG" \
-            --notes "## Changes
-
-          See the [commit history](https://github.com/asleep-ai/react-native-alarm/commits/main) for details.
-
-          ## Installation
-
-          \`\`\`bash
-          npm install @asleep-ai/react-native-alarm@${{ steps.version.outputs.version }}
-          \`\`\`"
+            --notes-file "${{ steps.notes.outputs.path }}"
