@@ -9,6 +9,11 @@ on:
 permissions:
   contents: write
   id-token: write
+  pull-requests: read
+
+concurrency:
+  group: publish
+  cancel-in-progress: false
 
 jobs:
   publish:
@@ -16,12 +21,30 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify release commit comes from main
+        run: |
+          if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" && "$GITHUB_REF" != "refs/heads/main" ]]; then
+            echo "::error::Manual dispatch is only allowed from main (got $GITHUB_REF)"
+            exit 1
+          fi
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "::error::$GITHUB_SHA is not reachable from origin/main"
+            exit 1
+          fi
 
       - name: Check whether this version needs publishing
         id: version
         run: |
           VERSION=$(node -p "require('./package.json').version")
+          if ! [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+([-.+][0-9A-Za-z.+-]+)?$ ]]; then
+            echo "::error::package.json version '$VERSION' is not valid semver"
+            exit 1
+          fi
           if [[ "$GITHUB_REF" == refs/tags/* ]]; then
             TAG="${GITHUB_REF#refs/tags/}"
             if [ "$TAG" != "v$VERSION" ]; then
@@ -29,21 +52,37 @@ jobs:
               exit 1
             fi
           fi
-          PUBLISHED=$(npm view "@asleep-ai/react-native-alarm@$VERSION" version 2>/dev/null || true)
-          if [ "$PUBLISHED" = "$VERSION" ]; then
-            echo "::error::Version $VERSION is already on npm - bump package.json before publishing"
-            exit 1
+          set +e
+          PUBLISHED=$(npm view "@asleep-ai/react-native-alarm@$VERSION" version 2>&1)
+          STATUS=$?
+          set -e
+          if [ $STATUS -ne 0 ]; then
+            if echo "$PUBLISHED" | grep -q "E404"; then
+              PUBLISHED=""
+            else
+              echo "::error::npm view failed with a registry error, not a missing version"
+              echo "$PUBLISHED"
+              exit 1
+            fi
           fi
-          echo "Publishing version $VERSION"
+          if [ "$PUBLISHED" = "$VERSION" ]; then
+            echo "::notice::Version $VERSION is already on npm - skipping publish, reconciling the GitHub Release only"
+            echo "publish_needed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "Publishing version $VERSION"
+            echo "publish_needed=true" >> "$GITHUB_OUTPUT"
+          fi
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
+        uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
-          node-version: "22"
+          # npm >=11.5.1 (trusted publishing) requires Node >=22.14
+          node-version: "^22.14.0"
+          package-manager-cache: false
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -54,31 +93,73 @@ jobs:
       - name: Run typecheck
         run: pnpm run typecheck
 
+      # Notes are generated before npm publish so a failure here aborts the run
+      # while it is still fully re-runnable - nothing irreversible has happened.
+      - name: Generate release notes
+        id: notes
+        uses: asleep-ai/actions/release-notes@20e9924525191da5461a7913b7282e33277abfda # release-notes/v1.2.1
+        with:
+          # HEAD works for both tag push and workflow_dispatch (where the
+          # v* tag does not exist yet); the previous tag is auto-derived.
+          current-tag: HEAD
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          system-prompt: |
+            Release notes for @asleep-ai/react-native-alarm, a React Native alarm library.
+            Output markdown only - no preamble, no trailing commentary.
+            Sections: '## New Features', '## Improvements', '## Bug Fixes', '## Internal Changes'.
+            Omit empty sections; do not invent content.
+            Rewrite commit subjects as user-facing bullets using the PR description when present.
+            Wrap code identifiers and paths in backticks; preserve PR references (#NNN).
+            Ignore Co-Authored-By trailers and merge artefacts.
+
       - name: Update npm for trusted publishing
-        run: npm install -g npm@latest
+        if: steps.version.outputs.publish_needed == 'true'
+        # npm >=11.5.1 is required for OIDC trusted publishing; Node 22 bundles
+        # npm 10.x. Pinned instead of @latest so an unvetted npm major (12.x is
+        # already out) cannot enter the release job.
+        run: npm install -g npm@11.18.0
 
       - name: Publish to npm (OIDC trusted publishing)
-        run: npm publish --access public
+        if: steps.version.outputs.publish_needed == 'true'
+        run: |
+          node --version
+          npm --version
+          npm publish --access public
 
       - name: Create tag and GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.version.outputs.version }}
+          NOTES_PATH: ${{ steps.notes.outputs.path }}
+          PUBLISH_NEEDED: ${{ steps.version.outputs.publish_needed }}
         run: |
-          TAG="v${{ steps.version.outputs.version }}"
+          TAG="v$VERSION"
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
             echo "Release $TAG already exists - skipping"
             exit 0
           fi
-          gh release create "$TAG" \
-            --repo "$GITHUB_REPOSITORY" \
-            --target "$GITHUB_SHA" \
-            --title "Release $TAG" \
-            --notes "## Changes
-
-          See the [commit history](https://github.com/asleep-ai/react-native-alarm/commits/main) for details.
-
-          ## Installation
-
-          \`\`\`bash
-          npm install @asleep-ai/react-native-alarm@${{ steps.version.outputs.version }}
-          \`\`\`"
+          {
+            echo ""
+            echo "## Installation"
+            echo ""
+            echo '```bash'
+            echo "npm install @asleep-ai/react-native-alarm@$VERSION"
+            echo '```'
+          } >> "$NOTES_PATH"
+          if git rev-parse -q --verify "refs/tags/$TAG" > /dev/null; then
+            gh release create "$TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --title "Release $TAG" \
+              --notes-file "$NOTES_PATH"
+          elif [ "$PUBLISH_NEEDED" = "true" ]; then
+            gh release create "$TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --target "$GITHUB_SHA" \
+              --title "Release $TAG" \
+              --notes-file "$NOTES_PATH"
+          else
+            # Reconcile mode with no tag: the commit npm was published from is
+            # unknown, so tagging the current commit could mislabel the release.
+            echo "::error::Version $VERSION is on npm but tag $TAG does not exist - create the tag at the published commit, then rerun"
+            exit 1
+          fi
