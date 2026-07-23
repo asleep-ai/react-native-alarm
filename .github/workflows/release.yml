@@ -1,0 +1,122 @@
+name: Release
+
+# One-click release: pick a semver bump, and this workflow bumps package.json
+# on a release branch, opens a PR, waits for CI (test + lint) to pass, squash-
+# merges it into main, and tags the merge commit. The tag push then triggers
+# publish.yml, which builds and publishes to npm via OIDC.
+#
+# Why a PAT/App token (secrets.GIT_TOKEN) instead of the default GITHUB_TOKEN:
+# events raised by GITHUB_TOKEN do not trigger other workflows, so a PR it
+# opened would never run ci.yml and the required checks would hang forever. A
+# PAT/App token raises real events, so CI runs and the required checks can
+# pass. The token needs contents:write + pull-requests:write on this repo, and
+# its org-secret visibility must include this repository.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version_type:
+        description: "Semver bump"
+        required: true
+        default: patch
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          # PAT/App token so the branch push and PR raise events that trigger
+          # ci.yml; kept in git config for the later tag push.
+          token: ${{ secrets.GIT_TOKEN }}
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
+
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "^22.14.0"
+          package-manager-cache: false
+
+      - name: Bump version and push release branch
+        id: bump
+        env:
+          VERSION_TYPE: ${{ inputs.version_type }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          NEW=$(npm version "$VERSION_TYPE" --no-git-tag-version | tail -n1)
+          NEW="${NEW#v}"
+          BRANCH="release/v$NEW"
+          echo "Bumping to v$NEW on $BRANCH"
+          # -B resets the branch if a previous failed run left a stale one.
+          git checkout -B "$BRANCH"
+          git add package.json
+          git commit -m "chore(release): v$NEW"
+          git push --force-with-lease origin "$BRANCH"
+          echo "version=$NEW" >> "$GITHUB_OUTPUT"
+          echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
+
+      - name: Open release PR
+        env:
+          GH_TOKEN: ${{ secrets.GIT_TOKEN }}
+          BRANCH: ${{ steps.bump.outputs.branch }}
+          VERSION: ${{ steps.bump.outputs.version }}
+        run: |
+          set -euo pipefail
+          # `|| true` keeps this idempotent: if a PR for the branch already
+          # exists (e.g. a retried run), fall through to the wait/merge step.
+          gh pr create \
+            --base main \
+            --head "$BRANCH" \
+            --title "chore(release): v$VERSION" \
+            --body "Automated release PR for v$VERSION. Merging this publishes @asleep-ai/react-native-alarm@$VERSION to npm." \
+            || true
+
+      - name: Wait for required checks, then squash-merge
+        env:
+          GH_TOKEN: ${{ secrets.GIT_TOKEN }}
+          BRANCH: ${{ steps.bump.outputs.branch }}
+        run: |
+          set -euo pipefail
+          # The pull_request event needs a moment to register check runs before
+          # `gh pr checks --watch` can see them.
+          for _ in $(seq 1 30); do
+            count=$(gh pr view "$BRANCH" --json statusCheckRollup \
+              --jq '.statusCheckRollup | length')
+            if [ "$count" -gt 0 ]; then
+              break
+            fi
+            sleep 5
+          done
+          gh pr checks "$BRANCH" --watch --interval 10 --fail-fast
+          gh pr merge "$BRANCH" --squash --delete-branch
+
+      - name: Tag the merge commit
+        env:
+          VERSION: ${{ steps.bump.outputs.version }}
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          TAG="v$VERSION"
+          # Tag the squash-merge commit now on main; pushing the tag triggers
+          # publish.yml (which verifies the commit is reachable from main).
+          git tag -a "$TAG" -m "Release $TAG" origin/main
+          git push origin "$TAG"
