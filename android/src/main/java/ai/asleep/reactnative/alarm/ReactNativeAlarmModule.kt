@@ -56,7 +56,8 @@ class ReactNativeAlarmModule : Module() {
       isSnoozed: Boolean,
       remainingSeconds: Long,
       stoppedAtISO: String? = null,
-      snoozeUntilISO: String? = null
+      snoozeUntilISO: String? = null,
+      isPaused: Boolean = false
     ) {
       val eventMap = mutableMapOf<String, Any?>(
         "id" to id,
@@ -65,6 +66,7 @@ class ReactNativeAlarmModule : Module() {
         "isSnoozed" to isSnoozed,
         "remainingSeconds" to remainingSeconds
       )
+      if (isPaused) eventMap["isPaused"] = true
       stoppedAtISO?.let { eventMap["stoppedAtISO"] = it }
       snoozeUntilISO?.let { eventMap["snoozeUntilISO"] = it }
       instance?.sendEvent("onAlarmStateChanged", eventMap)

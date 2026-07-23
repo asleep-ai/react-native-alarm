@@ -35,6 +35,13 @@ export type AlarmState = {
   label?: string;
   isRinging: boolean; // 현재 알람이 울리고 있는지
   isSnoozed: boolean; // 현재 스누즈 중인지
+  /**
+   * Present and `true` only while a countdown/timer is paused (Android
+   * notification action, or the iOS system pause control); absent otherwise.
+   * A locally-derived countdown must stop while this is true and recalibrate
+   * from `remainingSeconds` on the next event (resume clears it).
+   */
+  isPaused?: boolean;
   remainingSeconds: number; // 남은 시간 (초)
   stoppedAtISO?: string; // 알람이 정지된 시간 (ISO 8601)
   snoozeUntilISO?: string; // 스누즈가 끝나는 시간 (ISO 8601)

@@ -102,7 +102,8 @@ class ForegroundTimerService : Service() {
               isRinging = false,
               isSnoozed = isSnoozed,
               remainingSeconds = remainingWhenPaused,
-              snoozeUntilISO = if (isSnoozed) snoozeUntilISO else null
+              snoozeUntilISO = if (isSnoozed) snoozeUntilISO else null,
+              isPaused = true
             )
           }
         }

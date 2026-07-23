@@ -45,6 +45,13 @@ All notable changes to this project are documented in this file.
   are rendered by the OS and are unaffected. Do not forward alarm events
   directly to an analytics pipeline.
 
+  Pause-aware countdowns: `AlarmState` gains an optional `isPaused` flag, present
+  and `true` only while a countdown/timer is paused (Android notification action
+  or the iOS pause control). A locally-derived countdown must stop while it is
+  true and recalibrate from `remainingSeconds` on the next event; without this
+  flag a paused timer is indistinguishable from an active one now that the
+  per-second stream is gone.
+
   Recommended release: **0.2.0** (pre-1.0, so a breaking change is a minor bump).
 
 ### Notes

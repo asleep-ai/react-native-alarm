@@ -1222,6 +1222,10 @@ The library provides event listeners to track alarm state changes. This is usefu
 >   }, 1000);
 > });
 > ```
+>
+> If you support pause/resume, also subscribe with `addAlarmStateChangedListener`
+> and stop the local timer while `state.isPaused` is `true`, restarting from the
+> `remainingSeconds` of the next event that arrives without it (resume clears it).
 
 #### `addAlarmStartedListener(listener): Subscription`
 

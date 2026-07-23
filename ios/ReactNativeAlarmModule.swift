@@ -946,6 +946,7 @@ public class ReactNativeAlarmModule: Module {
             "label": label,
             "isRinging": false,
             "isSnoozed": false,
+            "isPaused": true,
             "remainingSeconds": finalRemaining
           ])
         @unknown default:
