@@ -1009,17 +1009,13 @@ public class ReactNativeAlarmModule: Module {
             "remainingSeconds": finalRemaining
           ])
         }
-      } else if isSnoozed && wasSnoozed && abs(finalRemaining - lastRemainingValue) >= 1 {
-        // Update remaining time for snoozed alarm
-        sendEvent("onAlarmStateChanged", [
-          "id": id,
-          "label": label,
-          "isRinging": false,
-          "isSnoozed": true,
-          "remainingSeconds": finalRemaining,
-          "snoozeUntilISO": snoozeUntilISO
-        ])
       } else {
+        // Edge-triggered contract (v0.2.0): emit only on real state transitions
+        // (snooze on/off, ringing start). Per-second remainingSeconds ticks
+        // intentionally do NOT emit onAlarmStateChanged — that per-second stream
+        // was the analytics flood. Derive a live countdown in JS from the
+        // remainingSeconds delivered on onAlarmStarted. Bookkeeping below still
+        // runs every pass so transition detection stays correct.
         if isSnoozed && !wasSnoozed {
           sendEvent("onAlarmSnoozed", [
             "id": id,
@@ -1056,26 +1052,6 @@ public class ReactNativeAlarmModule: Module {
             "isSnoozed": false,
             "remainingSeconds": 0
           ])
-        } else if isRinging && wasRinging && abs(remaining - lastRemainingValue) >= 1 {
-          sendEvent("onAlarmStateChanged", [
-            "id": id,
-            "label": label,
-            "isRinging": true,
-            "isSnoozed": false,
-            "remainingSeconds": remaining
-          ])
-        } else if abs(remaining - lastRemainingValue) >= 1 && remaining > 0 && !isRinging {
-          var eventMap: [String: Any] = [
-            "id": id,
-            "label": label,
-            "isRinging": false,
-            "isSnoozed": isSnoozed,
-            "remainingSeconds": remaining
-          ]
-          if isSnoozed {
-            eventMap["snoozeUntilISO"] = snoozeUntilISO
-          }
-          sendEvent("onAlarmStateChanged", eventMap)
         }
       }
     }

@@ -93,6 +93,18 @@ class ForegroundTimerService : Service() {
           remainingWhenPaused = ((targetTimeMs - now) / 1000).coerceAtLeast(0)
           isPaused = true
           updateNotification()
+          // Discrete transition: emit once on pause (previously carried by
+          // updateNotification's per-second event, now edge-triggered).
+          timerId?.let { id ->
+            ReactNativeAlarmModule.sendAlarmStateChangedEvent(
+              id = id,
+              label = label,
+              isRinging = false,
+              isSnoozed = isSnoozed,
+              remainingSeconds = remainingWhenPaused,
+              snoozeUntilISO = if (isSnoozed) snoozeUntilISO else null
+            )
+          }
         }
       }
       ACTION_RESUME -> {
@@ -101,6 +113,17 @@ class ForegroundTimerService : Service() {
           targetTimeMs = now + remainingWhenPaused * 1000
           isPaused = false
           updateNotification()
+          // Discrete transition: emit once on resume.
+          timerId?.let { id ->
+            ReactNativeAlarmModule.sendAlarmStateChangedEvent(
+              id = id,
+              label = label,
+              isRinging = false,
+              isSnoozed = isSnoozed,
+              remainingSeconds = remainingSeconds(),
+              snoozeUntilISO = if (isSnoozed) snoozeUntilISO else null
+            )
+          }
           tick()
         }
       }
@@ -133,19 +156,11 @@ class ForegroundTimerService : Service() {
   }
 
   private fun updateNotification() {
-    val notif = buildNotification()
-    val remain = remainingSeconds()
-    startForegroundInternal(notif)
-    timerId?.let { id ->
-      ReactNativeAlarmModule.sendAlarmStateChangedEvent(
-        id = id,
-        label = label,
-        isRinging = false,
-        isSnoozed = isSnoozed,
-        remainingSeconds = remain,
-        snoozeUntilISO = if (isSnoozed) snoozeUntilISO else null
-      )
-    }
+    // Notification-only refresh. Does NOT emit onAlarmStateChanged: tick() calls
+    // this every second, and per-second bridge events were the analytics flood
+    // removed in v0.2.0. Discrete transitions (pause/resume) emit explicitly in
+    // onStartCommand; start/snooze/ringing/finish emit at their own sites.
+    startForegroundInternal(buildNotification())
   }
 
   private fun remainingSeconds(): Long {

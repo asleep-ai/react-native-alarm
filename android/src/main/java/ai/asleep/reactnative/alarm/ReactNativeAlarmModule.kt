@@ -508,7 +508,6 @@ class ReactNativeAlarmModule : Module() {
 
       val wasRinging = lastIsRinging[id] ?: false
       val wasSnoozed = lastIsSnoozed[id] ?: false
-      val lastRemainingValue = lastRemaining[id] ?: Long.MAX_VALUE
 
       // Send events for state changes
       if (isSnoozed && !wasSnoozed) {
@@ -531,17 +530,12 @@ class ReactNativeAlarmModule : Module() {
           isSnoozed = false,
           remainingSeconds = remaining
         )
-      } else if (isSnoozed && wasSnoozed && abs(remaining - lastRemainingValue) >= 1) {
-        // Update remaining time for snoozed alarm
-        sendAlarmStateChangedEvent(
-          id = id,
-          label = alarm.label,
-          isRinging = false,
-          isSnoozed = true,
-          remainingSeconds = remaining,
-          snoozeUntilISO = alarm.dateISO
-        )
       } else if (isRinging && !wasRinging && !isSnoozed) {
+        // Edge-triggered contract (v0.2.0): emit only on real transitions.
+        // The former snooze-tick and countdown-tick arms emitted
+        // onAlarmStateChanged every second (the analytics flood) and were
+        // removed. Derive a live countdown in JS from onAlarmStarted's
+        // remainingSeconds. Snapshot bookkeeping below still runs every pass.
         sendAlarmStartedEvent(id, alarm.label, 0)
         sendAlarmStateChangedEvent(
           id = id,
@@ -549,14 +543,6 @@ class ReactNativeAlarmModule : Module() {
           isRinging = true,
           isSnoozed = false,
           remainingSeconds = 0
-        )
-      } else if (remaining > 0 && !isRinging && !isSnoozed && abs(remaining - lastRemainingValue) >= 1) {
-        sendAlarmStateChangedEvent(
-          id = id,
-          label = alarm.label,
-          isRinging = false,
-          isSnoozed = false,
-          remainingSeconds = remaining
         )
       }
     }
@@ -689,8 +675,6 @@ class ReactNativeAlarmModule : Module() {
       "{}"
     }
   }
-
-  private fun abs(value: Long): Long = if (value < 0) -value else value
 
   private fun parseIsoToEpochMillis(iso: String): Long? {
     return try {
