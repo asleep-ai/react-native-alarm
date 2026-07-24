@@ -35,11 +35,26 @@ export type AlarmState = {
   label?: string;
   isRinging: boolean; // 현재 알람이 울리고 있는지
   isSnoozed: boolean; // 현재 스누즈 중인지
+  /**
+   * Present and `true` only while a countdown/timer is paused (Android
+   * notification action, or the iOS system pause control); absent otherwise.
+   * A locally-derived countdown must stop while this is true and recalibrate
+   * from `remainingSeconds` on the next event (resume clears it).
+   */
+  isPaused?: boolean;
   remainingSeconds: number; // 남은 시간 (초)
   stoppedAtISO?: string; // 알람이 정지된 시간 (ISO 8601)
   snoozeUntilISO?: string; // 스누즈가 끝나는 시간 (ISO 8601)
 };
 
+/**
+ * Alarm lifecycle events. Edge-triggered since v0.2.0: each event fires only on
+ * a real state transition, NOT once per second. `onAlarmStateChanged` no longer
+ * emits a per-second "remaining ticked down" update; its `remainingSeconds` is a
+ * snapshot captured at the transition. For a live in-app countdown, seed a local
+ * timer from `onAlarmStarted`'s `remainingSeconds` instead of relying on event
+ * frequency, and do not forward these events straight to analytics.
+ */
 export type ReactNativeAlarmEvents = {
   onAlarmFired: (event: { id: AlarmId }) => void;
   onAlarmStarted: (event: { id: AlarmId; label?: string; remainingSeconds: number }) => void;

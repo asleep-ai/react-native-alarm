@@ -1178,7 +1178,7 @@ await cancelAll();
 
 #### `checkAlarmStates(): Promise<void>`
 
-Manually triggers a check for alarm state changes. Useful for iOS where periodic checks may be needed.
+Re-checks alarm state on iOS and emits any transition events found. Since v0.2.0 it emits only on real transitions, so the recommended periodic call (below) no longer produces the old per-second event stream — it is cheap. Keep calling it periodically on iOS (or on app foreground) so snooze/stop performed from the system alarm UI are detected while your app is running.
 
 **Example:**
 
@@ -1196,7 +1196,36 @@ useEffect(() => {
 
 ### Event Listeners
 
-The library provides event listeners to track alarm state changes in real-time. This is useful for updating your app's UI when alarms start, stop, or are snoozed.
+The library provides event listeners to track alarm state changes. This is useful for updating your app's UI when alarms start, stop, or are snoozed.
+
+> **Edge-triggered since v0.2.0.** Events fire only on real state transitions
+> (started, snoozed, unsnoozed, ringing, paused/resumed, stopped) — **not once
+> per second**. In particular `onAlarmStateChanged` no longer emits a per-second
+> "remaining ticked down" update, and its `remainingSeconds` is a snapshot taken
+> at the transition. Earlier versions emitted ~1 event/second while a timer ran.
+>
+> **Do not forward these events straight to analytics**, and do not drive a
+> per-second UI off their frequency. To show a live in-app countdown, seed a
+> local timer from the `remainingSeconds` on `onAlarmStarted` (the lock-screen /
+> Dynamic Island / notification countdown is rendered by the OS and needs
+> nothing from JS):
+>
+> ```typescript
+> import { addAlarmStartedListener } from "@asleep-ai/react-native-alarm";
+>
+> addAlarmStartedListener(({ remainingSeconds }) => {
+>   const firesAt = Date.now() + remainingSeconds * 1000;
+>   const timer = setInterval(() => {
+>     const left = Math.max(0, Math.ceil((firesAt - Date.now()) / 1000));
+>     setRemaining(left);
+>     if (left === 0) clearInterval(timer);
+>   }, 1000);
+> });
+> ```
+>
+> If you support pause/resume, also subscribe with `addAlarmStateChangedListener`
+> and stop the local timer while `state.isPaused` is `true`, restarting from the
+> `remainingSeconds` of the next event that arrives without it (resume clears it).
 
 #### `addAlarmStartedListener(listener): Subscription`
 
