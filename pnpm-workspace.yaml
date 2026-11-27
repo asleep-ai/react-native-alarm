@@ -7,6 +7,7 @@ packages:
 # - postcss <8.5.10 (via @expo/metro-config): GHSA-qx2v-qp2m-jg93
 # - uuid <11.1.1 (via xcode, uses only uuid.v4): GHSA-w5hq-g745-h8pq
 overrides:
+  shell-quote: 1.12.0
   postcss: '>=8.5.10'
   uuid: '>=11.1.1'
 
